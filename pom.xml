@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Local workspace aggregator. NOT tracked by source control. -->
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+  <groupId>org.lawfulevil.inventory</groupId>
+  <artifactId>inventory-aggregator</artifactId>
+  <version>1-SNAPSHOT</version>
+  <packaging>pom</packaging>
+  <name>inventory-aggregator</name>
+  <description>Untracked local aggregator for the inventory workspace</description>
+  <modules>
+    <module>inventory-parent</module>
+    <module>inventory-api</module>
+    <module>inventory-impl</module>
+    <module>inventory-server</module>
+    <module>inventory-webapp</module>
+  </modules>
+</project>
