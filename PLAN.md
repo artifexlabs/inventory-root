@@ -62,7 +62,7 @@ eventually — iOS/Android clients.
 | [inventory-api/](inventory-api/) | Domain model, service interfaces, JSON wire contracts, audit/auth/user interfaces, constants. Depends on `vertx-core` only for `JsonObject`/`JsonArray`. |
 | [inventory-impl/](inventory-impl/) | Default implementations: Postgres repositories, transactional `InventorySystem`, audit sink, Liquibase changelogs. CDI beans, minimal Quarkus coupling. |
 | [inventory-server/](inventory-server/) | Quarkus service host: REST resources exposing `InventorySystem`, OpenAPI (`quarkus-smallrye-openapi`), event-bus consumers, token auth, health probes. |
-| [inventory-web-api/](inventory-web-api/) *(formerly `inventory-webapp`; artifact renamed 2026-08-07)* | Quarkus app: the browser-facing API tier — today a transparent `/api/v1/*` gateway to inventory-server (no HTML, no session state); Phase 7 thickens it into an aggregating BFF (page-shaped payloads, pagination, derived display fields) serving web and future mobile clients. |
+| [inventory-web-api/](inventory-web-api/) *(formerly `inventory-webapp`; artifact renamed 2026-08-07)* | Quarkus app: the browser-facing API tier — today a transparent `/api/v1/*` gateway to inventory-server (no HTML, no session state); Phase 6 thickens it into an aggregating BFF (page-shaped payloads, pagination, derived display fields) serving web and future mobile clients. |
 | [inventory-webapp/](inventory-webapp/) *(new 2026-08-07)* | Quarkus app: the web UI (extracted from `inventory-web-api` in Phase 5) — Qute pages over Pico.css + design tokens, session cookie + OIDC dance, calling web-api only. Gains Svelte islands (Phase 8) for interactive surfaces. |
 
 ## Roadmap
@@ -101,10 +101,17 @@ eventually — iOS/Android clients.
   `inventory-web-api` becomes the pure browser-facing API tier.
 - `inventory-webapp` stays a Maven/Quarkus build identical to the siblings so the
   standing test flow keeps working. Any transition to a different web framework — or a
-  different language entirely — comes **after Phase 6**, and is enabled (not required)
-  by this extraction.
+  different language entirely — comes **after the native/deploy phase (Phase 7)**, and
+  is enabled (not required) by this extraction.
 
-### Phase 6 — Native and deploy *(was Phase 5; bumped 2026-08-07)*
+### Phase 6 — API shaping: web-api becomes an aggregating BFF *(eighth milestone — detail below; swapped ahead of native/deploy 2026-08-07)*
+- Thicken `inventory-web-api` from transparent gateway to aggregating BFF: page-shaped
+  aggregate endpoints, pagination/filter/search for listings, derived display fields
+  (e.g. `belowMin`) computed once for every client. The webapp thins to rendering.
+- Per the web-UI-direction decision: shaping lives here, business rules stay in
+  inventory-server, and everything added serves the future mobile apps identically.
+
+### Phase 7 — Native and deploy *(was Phase 5, then 6; now follows the BFF work — swapped 2026-08-07)*
 - **AWT-in-native via `quarkus-awt`** (per the label/QR rendering decision above): add
   the extension to inventory-server; container image gains fonts + fontconfig (e.g.
   dejavu) so text renders in native; macOS flow is
@@ -115,13 +122,6 @@ eventually — iOS/Android clients.
 - Native-image builds for server, web-api, and webapp; container images; compose/nomad/k8s
   manifests; clustered event-bus configuration; cold/warm restart drills; backup/restore
   and migration runbooks (day-2).
-
-### Phase 7 — API shaping: web-api becomes an aggregating BFF *(eighth milestone — detail below)*
-- Thicken `inventory-web-api` from transparent gateway to aggregating BFF: page-shaped
-  aggregate endpoints, pagination/filter/search for listings, derived display fields
-  (e.g. `belowMin`) computed once for every client. The webapp thins to rendering.
-- Per the web-UI-direction decision: shaping lives here, business rules stay in
-  inventory-server, and everything added serves the future mobile apps identically.
 
 ### Phase 8 — Spatial annotation: photo → boxes → items *(ninth milestone — detail below)*
 - Upload a picture of a space, draw boxes on it, and turn each box into an
@@ -339,7 +339,7 @@ nothing needs it yet.
   - **htmx** for interactivity (inline edits, live search, move-item without full
     reload): attribute-driven, no build step, no framework lock-in, plays naturally
     with server-rendered Qute fragments.
-- **Later (after Phase 6):** because the UI is one isolated module consuming only the
+- **Later (after the native/deploy phase):** because the UI is one isolated module consuming only the
   `inventory-web-api` JSON contract, "transition to a new framework, potentially a
   different language" = replace `inventory-webapp` wholesale (SvelteKit, Next.js,
   anything) with zero changes to the API tiers; publishing the web-api OpenAPI document
@@ -351,10 +351,10 @@ nothing needs it yet.
 annotation among them) settle the question in favor of an island architecture — Qute
 shell + Svelte islands as custom elements (Phase 8 brings the first), SvelteKit only
 if the app ever tips majority-interactive, and a thick web-api / thin frontend split
-(Phase 7). The wholesale-replacement escape hatch remains real but is no longer the
+(Phase 6). The wholesale-replacement escape hatch remains real but is no longer the
 expected path.
 
-## Eighth milestone (Phase 7: aggregating BFF)
+## Eighth milestone (Phase 6: aggregating BFF)
 
 *Added 2026-08-07. Motivation: the item detail page currently makes six sequential
 API calls; the items list fetches every item on every view; `belowMin` is computed in
@@ -428,7 +428,7 @@ the native/Linux constraint applies only to the shipped binary, never to develop
    (JetDirect). Tests run a *fake printer*: a trivial socket server capturing bytes,
    asserted like any other fixture. macOS also runs CUPS natively, so a local file-backed
    print queue covers IPP/queue-based printers for manual checks.
-4. **Hardware** — the only stage requiring metal: a manual smoke checklist in the Phase 6
+4. **Hardware** — the only stage requiring metal: a manual smoke checklist in the Phase 7
    runbook, deferred until the printer vendor (open unknown) is chosen. The vendor choice
    gates only stages 2 and 4's specifics — never the architecture, which stays behind the
    existing `LabelPrinter` interface.
@@ -446,11 +446,11 @@ the native/Linux constraint applies only to the shipped binary, never to develop
 - Phase 5 gate: after the UI move, the aggregator is green, `quarkus dev` in webapp +
   web-api + server still passes the second-milestone browser flow, and
   `inventory-web-api` serves no HTML pages (JSON/auth only).
-- Phase 6 gate: `mvn verify -Dnative` produces a native executable that passes the same
-  integration tests; container restarts (cold and warm) lose no committed data.
-- Phase 7 gate: the item-detail page renders from one web-api call (stub request-count
+- Phase 6 gate: the item-detail page renders from one web-api call (stub request-count
   assertion); items list paginates and searches; no aggregation or derivation code
   remains in `PageResource`; aggregator green.
+- Phase 7 gate: `mvn verify -Dnative` produces a native executable that passes the same
+  integration tests; container restarts (cold and warm) lose no committed data.
 - Phase 8 gate: in `quarkus dev` — upload a space photo, draw a box, name it, and the
   new item exists, contained in the space's container, with its region linked and an
   `item.create-from-region` audit row; `mvn verify` runs the island build and its tests.
