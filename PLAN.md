@@ -22,6 +22,7 @@ eventually — iOS/Android clients.
 | Build layout | **Multi-repo + local aggregator** | The five repos stay independently versioned/publishable; an aggregator pom at the workspace root (untracked, or its own tiny repo) gives a one-command local build in dependency order. |
 | IDs | **ULID strings** | 26 chars, lexically sortable (index-friendly), compact enough for small QR codes. QR encodes `https://<host>/i/{id}`. `Item.getId()` stays `String`. |
 | Web tier split | **`inventory-web-api` (API) + new `inventory-webapp` (UI)** *(added 2026-08-07)* | The original `inventory-webapp` module was renamed to `inventory-web-api` (GitHub repo, directory, and Maven artifact). A new `inventory-webapp` module (fresh repo, Quarkus/Maven skeleton building and testing like its siblings) receives the actual web UI in Phase 5, leaving `inventory-web-api` as the pure browser-facing API tier (sessions, login/OIDC exchange, JSON the UI consumes). Rationale: with the UI isolated behind a JSON contract, it can be restyled or wholesale replaced later — different framework, even a different language — without touching any API tier. |
+| Web UI direction | **Island architecture: Qute shell + Svelte islands; thick web-api, thin frontend** *(decided 2026-08-07)* | Planned interactions (photo annotation — draw boxes on a space picture and turn them into items/containers — and more to come) are real client-side interactivity, but the app's majority remains server-rendered CRUD. So: keep the Qute/Pico shell; mount self-contained **Svelte** components compiled as custom elements exactly where interactivity is needed (`quarkus-web-bundler` keeps the npm build inside Maven, TypeScript for island code). If the app ever tips majority-interactive, islands migrate into **SvelteKit** — a gradient, not a rewrite cliff. (React islands were the considered alternative; rejected for now: heavier baseline, ecosystem weight not yet needed.) Complementary principle: **web-api thickens, frontend thins** — aggregation, pagination, derived display fields live in web-api (serving web and future mobile once); business rules stay in inventory-server; the webapp renders and holds the session. Boundary test: an `if` that changes what is *allowed* belongs in inventory-server; one that changes what is *shown* may live in web-api; the webapp only renders. |
 | Label/QR rendering in native | **`quarkus-awt`** *(revised 2026-08-06; supersedes the pure-PNG-encoder decision of 2026-08-05)* | Labels will compose text and possibly other images alongside the QR — that is real Java2D (`Graphics2D`, fonts), which a bare PNG encoder cannot do. quarkus-awt makes AWT work in native images with Quarkus maintaining the metadata. Costs accepted: native images are Linux-only (the deploy target is Linux containers anyway) and the container image must carry fonts + fontconfig. macOS development is unaffected — headless AWT works fully on the JVM, so all dev and tests run on the Mac; native verification happens by container-building and container-running. If labels ever turn out to be QR-only after all, the pure-JDK 1-bit PNG encoder over zxing's `BitMatrix` remains the recorded simplification option. |
 
 ## Architecture
@@ -61,8 +62,8 @@ eventually — iOS/Android clients.
 | [inventory-api/](inventory-api/) | Domain model, service interfaces, JSON wire contracts, audit/auth/user interfaces, constants. Depends on `vertx-core` only for `JsonObject`/`JsonArray`. |
 | [inventory-impl/](inventory-impl/) | Default implementations: Postgres repositories, transactional `InventorySystem`, audit sink, Liquibase changelogs. CDI beans, minimal Quarkus coupling. |
 | [inventory-server/](inventory-server/) | Quarkus service host: REST resources exposing `InventorySystem`, OpenAPI (`quarkus-smallrye-openapi`), event-bus consumers, token auth, health probes. |
-| [inventory-web-api/](inventory-web-api/) *(formerly `inventory-webapp`; artifact renamed 2026-08-07)* | Quarkus app: browser-facing API tier — session handling, credential + Google OIDC login, and the JSON endpoints the UI consumes. Currently still hosts the server-rendered UI; that moves out in Phase 5. |
-| [inventory-webapp/](inventory-webapp/) *(new 2026-08-07)* | Quarkus app: the web UI, extracted from `inventory-web-api` in Phase 5. Currently a skeleton (placeholder page + test) so `mvn test` runs like the other modules. |
+| [inventory-web-api/](inventory-web-api/) *(formerly `inventory-webapp`; artifact renamed 2026-08-07)* | Quarkus app: the browser-facing API tier — today a transparent `/api/v1/*` gateway to inventory-server (no HTML, no session state); Phase 7 thickens it into an aggregating BFF (page-shaped payloads, pagination, derived display fields) serving web and future mobile clients. |
+| [inventory-webapp/](inventory-webapp/) *(new 2026-08-07)* | Quarkus app: the web UI (extracted from `inventory-web-api` in Phase 5) — Qute pages over Pico.css + design tokens, session cookie + OIDC dance, calling web-api only. Gains Svelte islands (Phase 8) for interactive surfaces. |
 
 ## Roadmap
 
@@ -94,7 +95,7 @@ eventually — iOS/Android clients.
 - ULID → QR generation (zxing); label-printer connector API; scan deep links that resolve
   `/i/{id}` to webapp or (later) mobile app.
 
-### Phase 5 — Web UI extraction *(seventh milestone — detail below)*
+### Phase 5 — Web UI extraction *(seventh milestone — detail below; executed 2026-08-07)*
 - Move all actual web-UI work (pages, templates, static assets, the session cookie the
   browser sees) from `inventory-web-api` into the new `inventory-webapp` module;
   `inventory-web-api` becomes the pure browser-facing API tier.
@@ -114,6 +115,19 @@ eventually — iOS/Android clients.
 - Native-image builds for server, web-api, and webapp; container images; compose/nomad/k8s
   manifests; clustered event-bus configuration; cold/warm restart drills; backup/restore
   and migration runbooks (day-2).
+
+### Phase 7 — API shaping: web-api becomes an aggregating BFF *(eighth milestone — detail below)*
+- Thicken `inventory-web-api` from transparent gateway to aggregating BFF: page-shaped
+  aggregate endpoints, pagination/filter/search for listings, derived display fields
+  (e.g. `belowMin`) computed once for every client. The webapp thins to rendering.
+- Per the web-UI-direction decision: shaping lives here, business rules stay in
+  inventory-server, and everything added serves the future mobile apps identically.
+
+### Phase 8 — Spatial annotation: photo → boxes → items *(ninth milestone — detail below)*
+- Upload a picture of a space, draw boxes on it, and turn each box into an
+  item/container. Region model and transactional create-from-region land in the API
+  tiers first; the first Svelte island (the annotator) arrives with its build
+  toolchain; everything else stays server-rendered.
 
 ## First milestone (Phase 1, implementable detail)
 
@@ -332,6 +346,71 @@ nothing needs it yet.
   gives typed client generation in any language. Until that day, Qute + tokens + Pico +
   htmx keeps the UI modern-looking, easily styleable, and cheap to maintain.
 
+**Superseded 2026-08-07** — the "Later" paragraph above is resolved by the
+**Web UI direction** decision in the locked table: planned interactions (photo
+annotation among them) settle the question in favor of an island architecture — Qute
+shell + Svelte islands as custom elements (Phase 8 brings the first), SvelteKit only
+if the app ever tips majority-interactive, and a thick web-api / thin frontend split
+(Phase 7). The wholesale-replacement escape hatch remains real but is no longer the
+expected path.
+
+## Eighth milestone (Phase 7: aggregating BFF)
+
+*Added 2026-08-07. Motivation: the item detail page currently makes six sequential
+API calls; the items list fetches every item on every view; `belowMin` is computed in
+the UI tier where mobile apps cannot reuse it.*
+
+1. **`inventory-web-api`** — first real endpoints alongside the transparent proxy
+   (specific routes win over the `{path: .*}` catch-all):
+   - `GET /api/v1/items/{id}/detail` — one page-shaped payload: item, containers,
+     children, container candidates, recent history, locations, assets. Collapses the
+     detail page's six calls into one round trip.
+   - `GET /api/v1/items?query=&page=&size=` — paginated, filtered, searchable listing
+     with `belowMin` computed per row (moved out of `PageResource.itemsPage`).
+     Container-candidate lookup becomes a filtered query, not "fetch all items".
+   - Aggregates are composed from the same inventory-server calls the proxy already
+     forwards; no business decision is made in this tier (shaping vs. deciding).
+2. **`inventory-webapp`** — `ServerClient` gains `itemDetail(...)` and the paginated
+   `items(...)`; `PageResource` drops its aggregation/derivation code and just renders.
+   Items page gains search box + pagination controls (plain forms/links — no island
+   needed).
+3. **Tests**: web-api aggregate tests against the `StubBackend` (now also serving
+   canned inventory-server JSON); webapp page tests updated to stub the new client
+   methods. Gate: item detail renders from ONE web-api call (assert on the stub's
+   request count); aggregator green.
+
+## Ninth milestone (Phase 8: spatial annotation)
+
+*Added 2026-08-07. Photo of a space → drawn boxes → items/containers. API-first: the
+region model is valuable even with a crude UI, and the iOS/Android apps reuse it
+wholesale (photographing a shelf is the most phone-shaped feature in the plan).*
+
+1. **`inventory-api`** — `AssetRegion` (id, assetId, normalized rect x/y/w/h in 0–1 so
+   coordinates survive any display size, optional linked itemId, label); region
+   operations on the asset/inventory interfaces: list/create/delete regions for an
+   asset, and `createItemFromRegion(assetId, rect, name, type, containerId)` — create
+   item + contain it + link the region, one transaction.
+2. **`inventory-impl`** — changeset 010 (`asset_regions` table + rollback); InMemory +
+   Pg implementations; audit actions `region.create`, `region.delete`,
+   `item.create-from-region`.
+3. **`inventory-server`** — `GET/POST /api/v1/assets/{id}/regions`,
+   `DELETE /api/v1/regions/{id}`, `POST /api/v1/assets/{id}/regions/make-item`;
+   rides through the web-api proxy untouched.
+4. **`inventory-webapp`** — island toolchain + the annotator:
+   - `quarkus-web-bundler` brings the npm build into Maven (`mvn verify` stays the one
+     command); **Svelte + TypeScript**, each island compiled as a custom element.
+   - First island `<space-annotator asset-id="...">` mounted from the item-detail
+     template on image assets: `<img>` + SVG overlay, pointer events for
+     draw/select/resize, a small form per box (name, type) posting create-from-region
+     through the session. A few hundred lines of TS; no canvas library unless
+     pan/zoom/rotate is later demanded (then Konva).
+5. **Tests**: region CRUD + transactional create-from-region in impl (both backends)
+   and server (one audit row, containment correct, region linked); webapp page test
+   asserts the island element + its data attributes render for image assets. Island
+   internals get vitest coverage inside the bundler build. Gate: full flow in
+   `quarkus dev` — upload photo, draw box, name it, see the new item contained in the
+   space's container with the region linked; aggregator green.
+
 ## Label pipeline and printer testing
 
 *Added 2026-08-06. The label path decomposes into four stages; the first three are fully
@@ -369,6 +448,12 @@ the native/Linux constraint applies only to the shipped binary, never to develop
   `inventory-web-api` serves no HTML pages (JSON/auth only).
 - Phase 6 gate: `mvn verify -Dnative` produces a native executable that passes the same
   integration tests; container restarts (cold and warm) lose no committed data.
+- Phase 7 gate: the item-detail page renders from one web-api call (stub request-count
+  assertion); items list paginates and searches; no aggregation or derivation code
+  remains in `PageResource`; aggregator green.
+- Phase 8 gate: in `quarkus dev` — upload a space photo, draw a box, name it, and the
+  new item exists, contained in the space's container, with its region linked and an
+  `item.create-from-region` audit row; `mvn verify` runs the island build and its tests.
 
 ## Open unknowns (tracked, not blocking)
 
@@ -376,7 +461,9 @@ the native/Linux constraint applies only to the shipped binary, never to develop
 - Label-printer protocols/vendors to support.
 - Deployment target among swarm/nomad/k8s (manifests kept portable until chosen).
 - Asset storage backend (object store vs. Postgres) — decided in Phase 3.
-- Long-term web UI framework/language (post-Phase 6; the Phase 5 extraction keeps it a
-  drop-in replacement decision). The `inventory-webapp` GitHub repo does not exist yet —
-  it must be created before any push (until then, GitHub redirects the old
-  `inventory-webapp` URL to `inventory-web-api` — do not push to it).
+- ~~Long-term web UI framework/language~~ — decided 2026-08-07 (Web UI direction row):
+  island architecture, Svelte islands, SvelteKit only at a majority-interactive tipping
+  point. Remaining sub-unknown: none until an island exists; revisit after Phase 8.
+- Repo naming caution: the `inventory-webapp` module pushes to
+  `github.com/mykelalvis/inventory-web-app` (hyphenated). The unhyphenated
+  `inventory-webapp` GitHub URL is a redirect to `inventory-web-api` — never push to it.
