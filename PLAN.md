@@ -301,8 +301,14 @@ original sketch, both recorded below):*
    and the serves-no-HTML gate. Full aggregator `mvn verify`: green across all six
    modules.
 
-Still open from the tech-path advice below: the visual pass (base layout, design
-tokens, Pico.css, htmx) — deliberately not bundled into the move commit.
+The visual pass from the tech-path advice landed 2026-08-07 as its own commit: shared
+`base.html` layout (Qute `{#include}`/`{#insert}`) with the nav in one place, design
+tokens in `META-INF/resources/css/app.css` (accent, radius — rebrand by editing four
+values), and vendored Pico.css v2.0.6 (fetched pinned from
+`https://cdn.jsdelivr.net/npm/@picocss/pico@2.0.6/css/pico.min.css`) styling the
+semantic markup classlessly. All seven pages extend the base; per-page inline styles
+are gone. htmx remains future work — it is about interactivity, not visuals, and
+nothing needs it yet.
 
 ### Web UI technology path (advice, recorded 2026-08-07)
 
