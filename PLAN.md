@@ -269,33 +269,40 @@ built and tested with OIDC disabled by default until credentials exist.*
 2. **webapp**: `GET /i/{id}` deep link (scan target) redirecting into the item page;
    item detail shows the QR code and a print-label button.
 
-## Seventh milestone (Phase 5: web UI extraction)
+## Seventh milestone (Phase 5: web UI extraction) — EXECUTED 2026-08-07
 
-*Added 2026-08-07. The skeleton `inventory-webapp` module (placeholder page + passing
-`@QuarkusTest`, wired into the aggregator) already exists; this milestone moves the UI
-into it.*
+*Added 2026-08-07; executed the same day. As built (two deliberate deviations from the
+original sketch, both recorded below):*
 
-1. **`inventory-webapp`** — becomes the browser-facing UI app (port 8082):
-   - Move from `inventory-web-api`: the Qute templates, `PageResource` and other
-     page-serving resources, static assets, and the session cookie + `SessionStore`
-     (the browser talks only to the webapp, exactly as it talks only to the old module
-     today — no CORS surface appears).
-   - The webapp's server-side REST client calls `inventory-web-api` for everything
-     (`inventory.web-api.url`, already in its `application.properties`); it holds the
-     API token obtained at login in the server-side session, never in the browser.
-2. **`inventory-web-api`** — reduces to the pure web API tier:
-   - Keeps: credential login/logout endpoints, the Google OIDC dance + exchange with
-     inventory-server, and JSON endpoints for everything the UI shows (items,
-     containment, admin, audit, assets, QR/label) — the same surface future mobile
-     apps use.
-   - Loses: all templates, pages, and static assets.
-   - Rename the Java package `org.lawfulevil.inventory.webapp` → `...webapi` here, so
-     the moved classes keep the `...webapp` package in their new home without collision.
-3. **Tests move with the code**: page-rendering tests (`PageResourceTest`,
-   `AdminAndCrudPagesTest`, `QrPagesTest`, …) go to `inventory-webapp` against a stubbed
-   web-api client; `inventory-web-api` keeps session/auth/JSON tests. Aggregator
-   `mvn clean verify` stays green throughout — the move lands in slices, never a broken
-   intermediate state.
+1. **`inventory-webapp`** — now the browser-facing UI app (port 8082): the Qute
+   templates, `PageResource`, the session cookie + `SessionStore` + `UserLookup`,
+   **and the Google OIDC dance (`OidcLoginResource`)** all moved here verbatim,
+   package `org.lawfulevil.inventory.webapp` unchanged. *(Deviation 1: the original
+   sketch kept the OIDC dance in web-api, but the dance is browser redirects that end
+   in session-cookie creation — inseparable from the session tier without a cross-app
+   handoff protocol. The exchange call itself still reaches inventory-server, through
+   the gateway.)* The moved `HttpServerClient` now targets `inventory.web-api.url`
+   (default `http://localhost:8081`); the browser talks only to the webapp, the webapp
+   talks only to web-api, and the API token lives in the server-side session, never
+   the browser.
+2. **`inventory-web-api`** — now the pure web API tier: a single `ApiProxyResource`
+   (new package `org.lawfulevil.inventory.webapi`) transparently forwards the whole
+   `/api/v1/*` surface — method, path, query, body, Authorization / Content-Type /
+   X-Exchange-Secret / X-Filename headers — to inventory-server, and serves no HTML
+   (any non-`/api/v1` path is 404). *(Deviation 2: rather than re-implementing
+   per-endpoint JSON resources, the tier is a transparent gateway — the stable public
+   surface for the UI today and mobile apps later, with zero duplicated contract.)*
+   Qute, OIDC, and the inventory-api dependency dropped from its pom.
+3. **Tests moved with the code**: all seven page/session/OIDC test classes (plus
+   `StubServerClient`) run unchanged in `inventory-webapp`; `inventory-web-api` gained
+   `ApiProxyResourceTest` against a `StubBackend` echo server (a
+   `QuarkusTestResourceLifecycleManager` on an ephemeral port) covering header/body/
+   query forwarding, status pass-through (401/204), binary pass-through (`qr.png`),
+   and the serves-no-HTML gate. Full aggregator `mvn verify`: green across all six
+   modules.
+
+Still open from the tech-path advice below: the visual pass (base layout, design
+tokens, Pico.css, htmx) — deliberately not bundled into the move commit.
 
 ### Web UI technology path (advice, recorded 2026-08-07)
 
