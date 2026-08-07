@@ -60,7 +60,7 @@ eventually — iOS/Android clients.
 | [inventory-api/](inventory-api/) | Domain model, service interfaces, JSON wire contracts, audit/auth/user interfaces, constants. Depends on `vertx-core` only for `JsonObject`/`JsonArray`. |
 | [inventory-impl/](inventory-impl/) | Default implementations: Postgres repositories, transactional `InventorySystem`, audit sink, Liquibase changelogs. CDI beans, minimal Quarkus coupling. |
 | [inventory-server/](inventory-server/) | Quarkus service host: REST resources exposing `InventorySystem`, OpenAPI (`quarkus-smallrye-openapi`), event-bus consumers, token auth, health probes. |
-| [inventory-webapp/](inventory-webapp/) | Quarkus app: token-secured API part (OpenAPI), UI part consuming it, Google OIDC login, admin section, audit views. |
+| [inventory-web-api/](inventory-web-api/) *(formerly `inventory-webapp`)* | Quarkus app: token-secured API part (OpenAPI), UI part consuming it, Google OIDC login, admin section, audit views. |
 
 ## Roadmap
 

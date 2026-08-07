@@ -13,6 +13,6 @@
     <module>inventory-api</module>
     <module>inventory-impl</module>
     <module>inventory-server</module>
-    <module>inventory-webapp</module>
+    <module>inventory-web-api</module>
   </modules>
 </project>
