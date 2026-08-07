@@ -13,3 +13,6 @@
 [submodule "inventory-web-api"]
 	path = inventory-web-api
 	url = git@github.com:mykelalvis/inventory-web-api.git
+[submodule "inventory-webapp"]
+	path = inventory-webapp
+	url = git@github.com:mykelalvis/inventory-webapp.git

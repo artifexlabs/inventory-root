@@ -1,5 +1,13 @@
 @inventory-api/ is meant to be all the interfaces (and probably all the generated code) for @inventory-impl/ @inventory-server/ and @inventory-webapp/ 
 
+> **Naming note (2026-08-07):** the module originally called `inventory-webapp` was
+> renamed to `inventory-web-api` — GitHub repo, directory, and Maven artifact all
+> renamed. Mentions of "inventory-webapp" below (its API component, token auth, Google
+> frontend, admin section) describe what is now `inventory-web-api`. A **new**
+> `inventory-webapp` module has been created to receive the web UI, which is being
+> extracted out of `inventory-web-api` (see PLAN.md, Phase 5), leaving
+> `inventory-web-api` as the pure browser-facing API tier.
+
 This is a fairly complicated inventory system 
 It needs to handle both physical objects as well as data.
 Data can come in the form of physical media or remote/network/cloud storage.

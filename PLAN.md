@@ -21,6 +21,7 @@ eventually — iOS/Android clients.
 | Database | **PostgreSQL** | Relational (README requirement), first-class Liquibase support, reactive client, JSONB for flexible item attributes. `vertx-mongo-client` is dropped. |
 | Build layout | **Multi-repo + local aggregator** | The five repos stay independently versioned/publishable; an aggregator pom at the workspace root (untracked, or its own tiny repo) gives a one-command local build in dependency order. |
 | IDs | **ULID strings** | 26 chars, lexically sortable (index-friendly), compact enough for small QR codes. QR encodes `https://<host>/i/{id}`. `Item.getId()` stays `String`. |
+| Web tier split | **`inventory-web-api` (API) + new `inventory-webapp` (UI)** *(added 2026-08-07)* | The original `inventory-webapp` module was renamed to `inventory-web-api` (GitHub repo, directory, and Maven artifact). A new `inventory-webapp` module (fresh repo, Quarkus/Maven skeleton building and testing like its siblings) receives the actual web UI in Phase 5, leaving `inventory-web-api` as the pure browser-facing API tier (sessions, login/OIDC exchange, JSON the UI consumes). Rationale: with the UI isolated behind a JSON contract, it can be restyled or wholesale replaced later — different framework, even a different language — without touching any API tier. |
 | Label/QR rendering in native | **`quarkus-awt`** *(revised 2026-08-06; supersedes the pure-PNG-encoder decision of 2026-08-05)* | Labels will compose text and possibly other images alongside the QR — that is real Java2D (`Graphics2D`, fonts), which a bare PNG encoder cannot do. quarkus-awt makes AWT work in native images with Quarkus maintaining the metadata. Costs accepted: native images are Linux-only (the deploy target is Linux containers anyway) and the container image must carry fonts + fontconfig. macOS development is unaffected — headless AWT works fully on the JVM, so all dev and tests run on the Mac; native verification happens by container-building and container-running. If labels ever turn out to be QR-only after all, the pure-JDK 1-bit PNG encoder over zxing's `BitMatrix` remains the recorded simplification option. |
 
 ## Architecture
@@ -60,7 +61,8 @@ eventually — iOS/Android clients.
 | [inventory-api/](inventory-api/) | Domain model, service interfaces, JSON wire contracts, audit/auth/user interfaces, constants. Depends on `vertx-core` only for `JsonObject`/`JsonArray`. |
 | [inventory-impl/](inventory-impl/) | Default implementations: Postgres repositories, transactional `InventorySystem`, audit sink, Liquibase changelogs. CDI beans, minimal Quarkus coupling. |
 | [inventory-server/](inventory-server/) | Quarkus service host: REST resources exposing `InventorySystem`, OpenAPI (`quarkus-smallrye-openapi`), event-bus consumers, token auth, health probes. |
-| [inventory-web-api/](inventory-web-api/) *(formerly `inventory-webapp`)* | Quarkus app: token-secured API part (OpenAPI), UI part consuming it, Google OIDC login, admin section, audit views. |
+| [inventory-web-api/](inventory-web-api/) *(formerly `inventory-webapp`; artifact renamed 2026-08-07)* | Quarkus app: browser-facing API tier — session handling, credential + Google OIDC login, and the JSON endpoints the UI consumes. Currently still hosts the server-rendered UI; that moves out in Phase 5. |
+| [inventory-webapp/](inventory-webapp/) *(new 2026-08-07)* | Quarkus app: the web UI, extracted from `inventory-web-api` in Phase 5. Currently a skeleton (placeholder page + test) so `mvn test` runs like the other modules. |
 
 ## Roadmap
 
@@ -92,7 +94,16 @@ eventually — iOS/Android clients.
 - ULID → QR generation (zxing); label-printer connector API; scan deep links that resolve
   `/i/{id}` to webapp or (later) mobile app.
 
-### Phase 5 — Native and deploy
+### Phase 5 — Web UI extraction *(seventh milestone — detail below)*
+- Move all actual web-UI work (pages, templates, static assets, the session cookie the
+  browser sees) from `inventory-web-api` into the new `inventory-webapp` module;
+  `inventory-web-api` becomes the pure browser-facing API tier.
+- `inventory-webapp` stays a Maven/Quarkus build identical to the siblings so the
+  standing test flow keeps working. Any transition to a different web framework — or a
+  different language entirely — comes **after Phase 6**, and is enabled (not required)
+  by this extraction.
+
+### Phase 6 — Native and deploy *(was Phase 5; bumped 2026-08-07)*
 - **AWT-in-native via `quarkus-awt`** (per the label/QR rendering decision above): add
   the extension to inventory-server; container image gains fonts + fontconfig (e.g.
   dejavu) so text renders in native; macOS flow is
@@ -100,7 +111,7 @@ eventually — iOS/Android clients.
   container and drive the standing smoke flow (login, CRUD, `qr.png`, `print-label`).
   Gate: the `QrAndLabelTest` decode round-trip stays green in JVM tests, and the same
   check is repeated with curl+zxing against the running native container.
-- Native-image builds for server and webapp; container images; compose/nomad/k8s
+- Native-image builds for server, web-api, and webapp; container images; compose/nomad/k8s
   manifests; clustered event-bus configuration; cold/warm restart drills; backup/restore
   and migration runbooks (day-2).
 
@@ -258,6 +269,56 @@ built and tested with OIDC disabled by default until credentials exist.*
 2. **webapp**: `GET /i/{id}` deep link (scan target) redirecting into the item page;
    item detail shows the QR code and a print-label button.
 
+## Seventh milestone (Phase 5: web UI extraction)
+
+*Added 2026-08-07. The skeleton `inventory-webapp` module (placeholder page + passing
+`@QuarkusTest`, wired into the aggregator) already exists; this milestone moves the UI
+into it.*
+
+1. **`inventory-webapp`** — becomes the browser-facing UI app (port 8082):
+   - Move from `inventory-web-api`: the Qute templates, `PageResource` and other
+     page-serving resources, static assets, and the session cookie + `SessionStore`
+     (the browser talks only to the webapp, exactly as it talks only to the old module
+     today — no CORS surface appears).
+   - The webapp's server-side REST client calls `inventory-web-api` for everything
+     (`inventory.web-api.url`, already in its `application.properties`); it holds the
+     API token obtained at login in the server-side session, never in the browser.
+2. **`inventory-web-api`** — reduces to the pure web API tier:
+   - Keeps: credential login/logout endpoints, the Google OIDC dance + exchange with
+     inventory-server, and JSON endpoints for everything the UI shows (items,
+     containment, admin, audit, assets, QR/label) — the same surface future mobile
+     apps use.
+   - Loses: all templates, pages, and static assets.
+   - Rename the Java package `org.lawfulevil.inventory.webapp` → `...webapi` here, so
+     the moved classes keep the `...webapp` package in their new home without collision.
+3. **Tests move with the code**: page-rendering tests (`PageResourceTest`,
+   `AdminAndCrudPagesTest`, `QrPagesTest`, …) go to `inventory-webapp` against a stubbed
+   web-api client; `inventory-web-api` keeps session/auth/JSON tests. Aggregator
+   `mvn clean verify` stays green throughout — the move lands in slices, never a broken
+   intermediate state.
+
+### Web UI technology path (advice, recorded 2026-08-07)
+
+- **Now (this milestone):** keep server-rendered Qute — the move is then a relocation,
+  not a rewrite. Immediately after the move, take the cheap visual win:
+  - One base layout template all pages extend (exists in embryo today).
+  - **Design tokens as CSS custom properties** (colors, spacing, radii, fonts) in one
+    stylesheet — restyling later = editing token values, not templates.
+  - **Pico.css v2** as the styling layer: classless, ~10 KB, themes via those same CSS
+    variables, styles semantic HTML directly — the existing plain templates get modern
+    visuals with near-zero markup changes. (Step-up option if component richness is
+    needed: Bootstrap 5.3 via `quarkus-web-bundler`; skip Tailwind for now — it drags
+    in a node build step for little gain at this scale.)
+  - **htmx** for interactivity (inline edits, live search, move-item without full
+    reload): attribute-driven, no build step, no framework lock-in, plays naturally
+    with server-rendered Qute fragments.
+- **Later (after Phase 6):** because the UI is one isolated module consuming only the
+  `inventory-web-api` JSON contract, "transition to a new framework, potentially a
+  different language" = replace `inventory-webapp` wholesale (SvelteKit, Next.js,
+  anything) with zero changes to the API tiers; publishing the web-api OpenAPI document
+  gives typed client generation in any language. Until that day, Qute + tokens + Pico +
+  htmx keeps the UI modern-looking, easily styleable, and cheap to maintain.
+
 ## Label pipeline and printer testing
 
 *Added 2026-08-06. The label path decomposes into four stages; the first three are fully
@@ -275,7 +336,7 @@ the native/Linux constraint applies only to the shipped binary, never to develop
    (JetDirect). Tests run a *fake printer*: a trivial socket server capturing bytes,
    asserted like any other fixture. macOS also runs CUPS natively, so a local file-backed
    print queue covers IPP/queue-based printers for manual checks.
-4. **Hardware** — the only stage requiring metal: a manual smoke checklist in the Phase 5
+4. **Hardware** — the only stage requiring metal: a manual smoke checklist in the Phase 6
    runbook, deferred until the printer vendor (open unknown) is chosen. The vendor choice
    gates only stages 2 and 4's specifics — never the architecture, which stays behind the
    existing `LabelPrinter` interface.
@@ -290,7 +351,10 @@ the native/Linux constraint applies only to the shipped binary, never to develop
   containers and see both container pages update; server log shows `item.move` audit.
 - Liquibase: a fresh Postgres container reaches current schema from empty; rolling back
   the latest changeset succeeds (README's forward-and-possibly-backward migration goal).
-- Phase 5 gate: `mvn verify -Dnative` produces a native executable that passes the same
+- Phase 5 gate: after the UI move, the aggregator is green, `quarkus dev` in webapp +
+  web-api + server still passes the second-milestone browser flow, and
+  `inventory-web-api` serves no HTML pages (JSON/auth only).
+- Phase 6 gate: `mvn verify -Dnative` produces a native executable that passes the same
   integration tests; container restarts (cold and warm) lose no committed data.
 
 ## Open unknowns (tracked, not blocking)
@@ -299,3 +363,7 @@ the native/Linux constraint applies only to the shipped binary, never to develop
 - Label-printer protocols/vendors to support.
 - Deployment target among swarm/nomad/k8s (manifests kept portable until chosen).
 - Asset storage backend (object store vs. Postgres) — decided in Phase 3.
+- Long-term web UI framework/language (post-Phase 6; the Phase 5 extraction keeps it a
+  drop-in replacement decision). The `inventory-webapp` GitHub repo does not exist yet —
+  it must be created before any push (until then, GitHub redirects the old
+  `inventory-webapp` URL to `inventory-web-api` — do not push to it).
