@@ -354,30 +354,38 @@ if the app ever tips majority-interactive, and a thick web-api / thin frontend s
 (Phase 6). The wholesale-replacement escape hatch remains real but is no longer the
 expected path.
 
-## Eighth milestone (Phase 6: aggregating BFF)
+## Eighth milestone (Phase 6: aggregating BFF) — EXECUTED 2026-08-07
 
-*Added 2026-08-07. Motivation: the item detail page currently makes six sequential
-API calls; the items list fetches every item on every view; `belowMin` is computed in
-the UI tier where mobile apps cannot reuse it.*
+*Added and executed 2026-08-07. Motivation: the item detail page made six sequential
+API calls; the items list fetched every item on every view; `belowMin` was computed in
+the UI tier where mobile apps cannot reuse it. As built (one deviation, noted below):*
 
-1. **`inventory-web-api`** — first real endpoints alongside the transparent proxy
-   (specific routes win over the `{path: .*}` catch-all):
-   - `GET /api/v1/items/{id}/detail` — one page-shaped payload: item, containers,
-     children, container candidates, recent history, locations, assets. Collapses the
-     detail page's six calls into one round trip.
-   - `GET /api/v1/items?query=&page=&size=` — paginated, filtered, searchable listing
-     with `belowMin` computed per row (moved out of `PageResource.itemsPage`).
-     Container-candidate lookup becomes a filtered query, not "fetch all items".
-   - Aggregates are composed from the same inventory-server calls the proxy already
-     forwards; no business decision is made in this tier (shaping vs. deciding).
-2. **`inventory-webapp`** — `ServerClient` gains `itemDetail(...)` and the paginated
-   `items(...)`; `PageResource` drops its aggregation/derivation code and just renders.
-   Items page gains search box + pagination controls (plain forms/links — no island
-   needed).
-3. **Tests**: web-api aggregate tests against the `StubBackend` (now also serving
-   canned inventory-server JSON); webapp page tests updated to stub the new client
-   methods. Gate: item detail renders from ONE web-api call (assert on the stub's
-   request count); aggregator green.
+1. **`inventory-web-api`** — `ItemViewsResource` (read models) beside the proxy:
+   - `GET /api/v1/views/items/{id}/detail` — one page-shaped payload: item, children,
+     containers, candidates (id+name, self excluded), recent history (20), locations,
+     assets, derived `locationName`. Collapses the detail page's six calls into one.
+   - `GET /api/v1/views/items?query=&page=&size=` — paginated (default 25), filtered
+     across name/displayName/type (case-insensitive), `belowMin` derived per row.
+   - *(Deviation: views live under `/api/v1/views/*` instead of shadowing
+     `/api/v1/items` — JAX-RS root-resource matching does not backtrack, so a literal
+     `/api/v1/items` resource would swallow every `/api/v1/items/*` subpath and 404 or
+     405 what it doesn't re-declare. A separate read-model namespace is also honest
+     BFF design.)*
+   - Aggregates are composed from the same inventory-server calls the proxy forwards
+     (Authorization passed through; 401s propagate; optional sections degrade to empty
+     lists; required calls failing → 502). Note for later scale: inventory-server still
+     returns the full item list to this tier — push pagination down into the server
+     when item count demands it.
+2. **`inventory-webapp`** — `ServerClient` gained `itemsView(...)`/`itemDetail(...)`
+   and lost the now-unneeded read methods (`items`, `containersOf`, `auditFor`,
+   `assetsFor`); `PageResource` renders only — zero aggregation or derivation remains.
+   Items page gained a search box and Previous/Next pagination (plain forms/links, no
+   island).
+3. **Tests**: `ItemViewsResourceTest` in web-api against `StubBackend` (now serving
+   canned inventory-server JSON: filter, pagination, belowMin, full aggregate, 404,
+   401); `AggregateViewsTest` in webapp asserts the gate — the detail page renders
+   from exactly ONE view call (stub counter) — plus search behavior. Full aggregator
+   `mvn verify` green across all six modules.
 
 ## Ninth milestone (Phase 8: spatial annotation)
 
