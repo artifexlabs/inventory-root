@@ -175,6 +175,21 @@ unknown.*
   GitHub is the remaining gate and happens at the next authorized push. Mobile CI
   (macOS runners for iOS) is explicitly out of scope here — noted for the mobile
   milestone.
+- **CI dependency (2026-08-08)**: the build parents off `ibparent-112-SNAPSHOT` (and
+  sibling ib* 112-SNAPSHOTs), currently locally installed only. The user will release
+  ibparent outside this project so it resolves remotely; until that release lands
+  (and inventory-parent points at it), ci.yml cannot resolve dependencies on GitHub.
+  The devcontainer is unaffected — it bind-mounts the host's `~/.m2/repository`.
+- **Known CI blocker (discovered 2026-08-08)**: the build parents off
+  `ibparent-112-SNAPSHOT` and friends (`ibparent-root`, `ibconstants`,
+  `ibexceptions`, `maven-import-bom` — all 112-SNAPSHOT), which are **locally
+  installed artifacts that exist only in the dev Mac's `~/.m2`** — no remote serves
+  them. The devcontainer works because it bind-mounts the host repository cache; CI
+  on GitHub cannot and will fail dependency resolution until one of: (a) the ib*
+  artifacts are published somewhere CI-reachable (e.g. GitHub Packages), (b) the
+  parent moves to a released ibparent from Maven Central (90 is the latest release
+  seen locally), or (c) CI builds the ib* sources first. Decision pending — pick one
+  before expecting ci.yml green.
 
 ### Phase 11 — Mobile developer readiness *(was Phase 10; renumbered 2026-08-08; checklist in [MOBILE-READINESS.md](MOBILE-READINESS.md); no ordinal milestone)*
 - Every credential and tool needed to start iOS/Android development, gathered BEFORE

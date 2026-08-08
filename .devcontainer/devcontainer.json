@@ -4,6 +4,13 @@
     "dockerfile": "Dockerfile"
   },
   "remoteUser": "vscode",
+  // Share the host's Maven repository cache: fast first build, and — critical —
+  // the ibparent/ibexceptions/... 112-SNAPSHOT parents are locally installed
+  // artifacts that exist ONLY there (not resolvable from any remote).
+  // Mounting just the repository subdir keeps the image's toolchains.xml.
+  "mounts": [
+    "source=${localEnv:HOME}/.m2/repository,target=/home/vscode/.m2/repository,type=bind"
+  ],
   // Reuse the HOST's docker daemon (same model as CI): native container
   // builds, Testcontainers, and the compose stack all work from inside.
   "features": {
