@@ -1,0 +1,40 @@
+# CI for the whole workspace: JVM build + tests of every module, run inside
+# the same container developers use locally (see .devcontainer/). The runner's
+# docker socket is mounted so Testcontainers/Dev Services work.
+#
+# Note: the devcontainer-image workflow must have published
+# ghcr.io/mykelalvis/inventory-devcontainer:latest at least once before this
+# can run (chicken-and-egg on the very first push only).
+name: ci
+
+on:
+  push:
+    branches: [develop, master, 'feature/**']
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/${{ github.repository_owner }}/inventory-devcontainer:latest
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+      volumes:
+        - /var/run/docker.sock:/var/run/docker.sock
+    env:
+      # Testcontainers inside a container-with-host-socket: resource reaping
+      # can't see our filesystem; disable ryuk, CI containers are short-lived.
+      TESTCONTAINERS_RYUK_DISABLED: "true"
+    steps:
+      # .gitmodules uses SSH URLs (local workflow); CI fetches over HTTPS.
+      # The rewrite must exist before checkout so its submodule handling
+      # (which injects the token) sees HTTPS URLs.
+      - name: Rewrite SSH GitHub URLs to HTTPS
+        run: git config --global url."https://github.com/".insteadOf "git@github.com:"
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Build and test all modules
+        run: mvn -B -ntp verify

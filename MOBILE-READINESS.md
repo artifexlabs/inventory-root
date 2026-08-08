@@ -1,4 +1,6 @@
-# Mobile developer readiness — Phase 10 checklist
+# Mobile developer readiness — Phase 11 checklist
+
+*(Renumbered from Phase 10 on 2026-08-08 when CI readiness took that slot.)*
 
 *Created 2026-08-08. Goal: every credential and tool needed to START iOS/Android
 development exists before the mobile milestone begins. Machine-verifiable items were

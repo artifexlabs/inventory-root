@@ -154,7 +154,29 @@ unknown.*
   TCP 9100 transport, wired as a `LabelPrinter` implementation selected by config;
   finish with the physical smoke (print a label, phone-scan the QR into `/i/{id}`).
 
-### Phase 10 — Mobile developer readiness *(checklist in [MOBILE-READINESS.md](MOBILE-READINESS.md); no ordinal milestone)*
+### Phase 10 — CI readiness *(no ordinal milestone; devcontainer landed 2026-08-08)*
+- **One container, two jobs**: [.devcontainer/](.devcontainer/) builds an image that is
+  both the local Dev Containers environment and the base image for GitHub Actions
+  container jobs. Ubuntu 22.04 + Temurin JDK 21 + Maven 3.9.16 (the parent enforces
+  ≥ 3.9.16) + git + docker CLI/compose/buildx, plus the JDK-21 Maven toolchains.xml
+  the build demands (for root — Actions — and vscode — devcontainer). Docker itself is
+  not inside: both uses talk to the host daemon (locally via the
+  docker-outside-of-docker feature, in CI via the runner's mounted socket).
+  *Verified 2026-08-08: image builds locally and `mvn test` of inventory-api passes
+  inside it.*
+- **Workflows** in [.github/workflows/](.github/workflows/):
+  `devcontainer-image.yml` publishes the image to
+  `ghcr.io/mykelalvis/inventory-devcontainer:latest` on .devcontainer changes;
+  `ci.yml` runs `mvn verify` for all modules inside that image (docker socket mounted
+  for Testcontainers/Dev Services, ryuk disabled). Submodule checkout rewrites the SSH
+  URLs in .gitmodules to HTTPS before checkout so the token flows.
+- **First-run notes**: the image workflow must run once before ci.yml can pull the
+  image (chicken-and-egg on the very first push); observing both workflows green on
+  GitHub is the remaining gate and happens at the next authorized push. Mobile CI
+  (macOS runners for iOS) is explicitly out of scope here — noted for the mobile
+  milestone.
+
+### Phase 11 — Mobile developer readiness *(was Phase 10; renumbered 2026-08-08; checklist in [MOBILE-READINESS.md](MOBILE-READINESS.md); no ordinal milestone)*
 - Every credential and tool needed to start iOS/Android development, gathered BEFORE
   the mobile work begins: Apple Developer Program enrollment, Google Play Console
   account (identity verification has multi-day lead time — start early), full Xcode +
@@ -555,8 +577,9 @@ the native/Linux constraint applies only to the shipped binary, never to develop
 ## Open unknowns (tracked, not blocking)
 
 - iOS/Android app stack and timeline (README: "eventually"). Credentials/tooling are
-  now Phase 10 ([MOBILE-READINESS.md](MOBILE-READINESS.md)); only the stack choice
-  remains open.
+  now Phase 11 ([MOBILE-READINESS.md](MOBILE-READINESS.md)); only the stack choice
+  remains open. When mobile CI arrives, iOS needs macOS runners — the Phase 10
+  devcontainer covers only the Linux-friendly lanes (JVM, native, Android later).
 - ~~Label-printer protocols/vendors to support~~ — resolved 2026-08-08: Brother
   PT-P750W first (raster protocol over TCP 9100); ZPL remains the reference dialect for
   a future Zebra-class device. Open sub-question: whether ~18 mm QRs on 24 mm tape scan

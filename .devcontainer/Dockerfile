@@ -1,0 +1,41 @@
+# Dual-use build container for the inventory workspace:
+#   1. Local development via Dev Containers (devcontainer.json builds this).
+#   2. Base image for GitHub Actions container jobs (published to
+#      ghcr.io/mykelalvis/inventory-devcontainer by the devcontainer-image
+#      workflow; ci.yml runs inside it).
+# Keep it boring: Ubuntu LTS + Temurin JDK 21 + Maven + git + docker CLI.
+# Docker itself is NOT in here — both uses talk to the host's daemon
+# (devcontainer: docker-outside-of-docker feature; Actions: the runner's
+# socket mounted into the container).
+FROM eclipse-temurin:21-jdk-jammy
+
+# ibparent's enforcer requires >= 3.9.16; keep in step with the dev machines.
+ARG MAVEN_VERSION=3.9.16
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      git curl ca-certificates unzip zip file gnupg jq \
+    && install -m 0755 -d /etc/apt/keyrings \
+    && curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc \
+    && echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu jammy stable" \
+       > /etc/apt/sources.list.d/docker.list \
+    && apt-get update && apt-get install -y --no-install-recommends \
+      docker-ce-cli docker-compose-plugin docker-buildx-plugin \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN curl -fsSL "https://archive.apache.org/dist/maven/maven-3/${MAVEN_VERSION}/binaries/apache-maven-${MAVEN_VERSION}-bin.tar.gz" \
+      | tar -xz -C /opt \
+    && ln -s /opt/apache-maven-${MAVEN_VERSION} /opt/maven \
+    && ln -s /opt/maven/bin/mvn /usr/local/bin/mvn
+
+ENV MAVEN_HOME=/opt/maven
+
+# Non-root user for Dev Containers ("remoteUser": "vscode"). GitHub Actions
+# container jobs ignore this and run as root, which is what they expect —
+# so no USER directive here.
+RUN useradd -m -s /bin/bash -u 1000 vscode
+
+# The build demands a JDK-21 Maven toolchain; provide it for both users.
+COPY toolchains.xml /root/.m2/toolchains.xml
+COPY --chown=vscode:vscode toolchains.xml /home/vscode/.m2/toolchains.xml
+
+CMD ["bash"]
