@@ -4,6 +4,11 @@
     "dockerfile": "Dockerfile"
   },
   "remoteUser": "vscode",
+  // Mount the workspace at the SAME path as on the host: docker commands run
+  // inside (native container-builds, compose bind mounts) hand paths to the
+  // HOST daemon, so the paths must mean the same thing on both sides.
+  "workspaceMount": "source=${localWorkspaceFolder},target=${localWorkspaceFolder},type=bind",
+  "workspaceFolder": "${localWorkspaceFolder}",
   // Share the host's Maven repository cache: fast first build, and — critical —
   // the ibparent/ibexceptions/... 112-SNAPSHOT parents are locally installed
   // artifacts that exist ONLY there (not resolvable from any remote).
