@@ -154,6 +154,20 @@ unknown.*
   TCP 9100 transport, wired as a `LabelPrinter` implementation selected by config;
   finish with the physical smoke (print a label, phone-scan the QR into `/i/{id}`).
 
+### Phase 10 — Mobile developer readiness *(checklist in [MOBILE-READINESS.md](MOBILE-READINESS.md); no ordinal milestone)*
+- Every credential and tool needed to start iOS/Android development, gathered BEFORE
+  the mobile work begins: Apple Developer Program enrollment, Google Play Console
+  account (identity verification has multi-day lead time — start early), full Xcode +
+  simulator, Android Studio + SDK + device, upload keystore. Mostly human actions;
+  machine-verifiable items were checked on the dev Mac 2026-08-08 (JDK 21 and Apple
+  CLT present; Xcode, Android SDK, and Node absent) and each carries its re-verify
+  command in the checklist.
+- Order-independent: run whenever convenient — account verifications benefit from
+  starting early. Done = checklist green except its explicitly deferred items.
+- Deliberately does NOT choose the mobile stack (still an open unknown); the
+  deep-link wiring (universal links / app links) is listed but deferred on a public
+  HTTPS domain.
+
 ## First milestone (Phase 1, implementable detail)
 
 1. **`inventory-api`** — de-codegen and extend:
@@ -540,7 +554,9 @@ the native/Linux constraint applies only to the shipped binary, never to develop
 
 ## Open unknowns (tracked, not blocking)
 
-- iOS/Android app stack and timeline (README: "eventually").
+- iOS/Android app stack and timeline (README: "eventually"). Credentials/tooling are
+  now Phase 10 ([MOBILE-READINESS.md](MOBILE-READINESS.md)); only the stack choice
+  remains open.
 - ~~Label-printer protocols/vendors to support~~ — resolved 2026-08-08: Brother
   PT-P750W first (raster protocol over TCP 9100); ZPL remains the reference dialect for
   a future Zebra-class device. Open sub-question: whether ~18 mm QRs on 24 mm tape scan

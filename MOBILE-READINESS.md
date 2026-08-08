@@ -1,0 +1,68 @@
+# Mobile developer readiness — Phase 10 checklist
+
+*Created 2026-08-08. Goal: every credential and tool needed to START iOS/Android
+development exists before the mobile milestone begins. Machine-verifiable items were
+checked on the dev Mac on 2026-08-08 (re-run the command shown to re-verify). Account
+items are human actions with a verification step. The mobile app STACK is deliberately
+NOT chosen here — that remains an open unknown; nothing below forecloses any stack.*
+
+## Accounts and credentials (human actions)
+
+- [ ] **Apple ID selected** for development (decide personal vs. dedicated).
+- [ ] **Apple Developer Program enrollment** — $99/year, https://developer.apple.com/enroll
+      (individual is fine; org enrollment needs a D-U-N-S number and takes longer).
+      Needed for: on-device install beyond 7-day free provisioning, TestFlight, App
+      Store, push notifications, universal links.
+      *Verify:* https://developer.apple.com/account shows an active membership; after
+      Xcode install, Xcode → Settings → Accounts lists the team.
+- [ ] **Google account selected** for development.
+- [ ] **Google Play Console developer account** — $25 one-time,
+      https://play.google.com/console/signup. Identity verification can take days —
+      start early. Individual accounts created after Nov 2023 also need a closed test
+      with 12+ testers for 14 days before production release — plan for it, not a
+      blocker for development.
+      *Verify:* Play Console dashboard loads with "All apps" and no outstanding
+      verification banners.
+- [ ] **Bundle/application id reserved** (at first app creation, both stores):
+      suggest `org.lawfulevil.inventory.app`. No action possible until enrollments
+      exist; record the chosen id here when taken.
+- [ ] **Android upload keystore** generated and backed up somewhere durable
+      (`keytool -genkeypair ...`), Play App Signing enrolled at first upload. Do NOT
+      commit the keystore; record its location here.
+
+## Local tooling (machine-verified)
+
+- [x] **JDK 21** — present (`java -version` → openjdk 21.0.12, verified 2026-08-08).
+- [x] **Apple Command Line Tools** — present (16.4, verified 2026-08-08 via
+      `pkgutil --pkg-info=com.apple.pkg.CLTools_Executables`).
+- [ ] **Full Xcode** — ABSENT (only CLT installed; `xcode-select -p` points at
+      CommandLineTools and `xcodebuild -version` fails). Install from the App Store,
+      then `sudo xcode-select -s /Applications/Xcode.app/Contents/Developer` and
+      accept the license. *Verify:* `xcodebuild -version` prints a version.
+- [ ] **iOS simulator runtime** — absent (comes with Xcode; add via Xcode → Settings →
+      Platforms). *Verify:* `xcrun simctl list runtimes` lists an iOS runtime.
+- [ ] **Android Studio + SDK** — ABSENT (no `/Applications/Android Studio.app`, no
+      `~/Library/Android/sdk`, no `adb`, `ANDROID_HOME` unset). Install Android
+      Studio (`brew install --cask android-studio` or download), let its setup wizard
+      install the SDK + platform-tools + an emulator image, and export
+      `ANDROID_HOME=$HOME/Library/Android/sdk` with `platform-tools` on PATH.
+      *Verify:* `adb version` works and `sdkmanager --list_installed` shows a
+      platform + build-tools.
+- [ ] **Android emulator or physical device** boots and `adb devices` sees it
+      (physical device: enable developer mode + USB debugging).
+- [ ] **Node.js LTS** — absent; required ONLY if the (undecided) stack is
+      React Native/Expo/Capacitor/Ionic. Leave unchecked until the stack decision;
+      install then (`brew install node`). *Verify:* `node --version`.
+
+## Deep-link wiring (deferred — depends on a public HTTPS domain, not credentials)
+
+- [ ] iOS Universal Links: `apple-app-site-association` served from the deployed
+      webapp domain (ties the QR `/i/{id}` links to the app). Needs the paid Apple
+      account's team id + the chosen bundle id + a real domain.
+- [ ] Android App Links: `/.well-known/assetlinks.json` on the same domain, signed
+      with the upload key's cert fingerprint.
+
+## Done when
+
+Every box above except the two deferred deep-link items and Node (stack-dependent) is
+checked. At that point mobile development can start the same day the stack is chosen.
