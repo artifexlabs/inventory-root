@@ -23,6 +23,7 @@ eventually — iOS/Android clients.
 | IDs | **ULID strings** | 26 chars, lexically sortable (index-friendly), compact enough for small QR codes. QR encodes `https://<host>/i/{id}`. `Item.getId()` stays `String`. |
 | Web tier split | **`inventory-web-api` (API) + new `inventory-webapp` (UI)** *(added 2026-08-07)* | The original `inventory-webapp` module was renamed to `inventory-web-api` (GitHub repo, directory, and Maven artifact). A new `inventory-webapp` module (fresh repo, Quarkus/Maven skeleton building and testing like its siblings) receives the actual web UI in Phase 5, leaving `inventory-web-api` as the pure browser-facing API tier (sessions, login/OIDC exchange, JSON the UI consumes). Rationale: with the UI isolated behind a JSON contract, it can be restyled or wholesale replaced later — different framework, even a different language — without touching any API tier. |
 | Web UI direction | **Island architecture: Qute shell + Svelte islands; thick web-api, thin frontend** *(decided 2026-08-07)* | Planned interactions (photo annotation — draw boxes on a space picture and turn them into items/containers — and more to come) are real client-side interactivity, but the app's majority remains server-rendered CRUD. So: keep the Qute/Pico shell; mount self-contained **Svelte** components compiled as custom elements exactly where interactivity is needed (`quarkus-web-bundler` keeps the npm build inside Maven, TypeScript for island code). If the app ever tips majority-interactive, islands migrate into **SvelteKit** — a gradient, not a rewrite cliff. (React islands were the considered alternative; rejected for now: heavier baseline, ecosystem weight not yet needed.) Complementary principle: **web-api thickens, frontend thins** — aggregation, pagination, derived display fields live in web-api (serving web and future mobile once); business rules stay in inventory-server; the webapp renders and holds the session. Boundary test: an `if` that changes what is *allowed* belongs in inventory-server; one that changes what is *shown* may live in web-api; the webapp only renders. |
+| Label printer hardware | **Brother PT-P750W first** *(decided 2026-08-08; printer in hand)* | Wi-Fi with a built-in print server accepting **raw TCP 9100** — exactly the transport stage 3 was designed around — and it speaks Brother's **documented** raster protocol (official Raster Command Reference; `ptouch-print` as OSS prior art), so the encode stage implements a spec instead of reverse-engineering. Constraints accepted: TZe tape ≤ 24 mm at 180 dpi (~128-dot head) → continuous strips, QR ≤ ~18 mm with text lengthwise; first physical gate is phone-scannability of an 18 mm QR. The DYMO MobileLabeler (1982171) was evaluated and rejected for system integration: Bluetooth-only, proprietary/undocumented app-oriented protocol, and Bluetooth-into-container plumbing — it stays a manual label maker. ZPL remains the recorded reference encoder, testable via Labelary only, until a Zebra-class printer exists. Everything stays behind `LabelPrinter`, so none of this forecloses other vendors. |
 | Label/QR rendering in native | **`quarkus-awt`** *(revised 2026-08-06; supersedes the pure-PNG-encoder decision of 2026-08-05)* | Labels will compose text and possibly other images alongside the QR — that is real Java2D (`Graphics2D`, fonts), which a bare PNG encoder cannot do. quarkus-awt makes AWT work in native images with Quarkus maintaining the metadata. Costs accepted: native images are Linux-only (the deploy target is Linux containers anyway) and the container image must carry fonts + fontconfig. macOS development is unaffected — headless AWT works fully on the JVM, so all dev and tests run on the Mac; native verification happens by container-building and container-running. If labels ever turn out to be QR-only after all, the pure-JDK 1-bit PNG encoder over zxing's `BitMatrix` remains the recorded simplification option. |
 
 ## Architecture
@@ -145,6 +146,13 @@ unknown.*
   item/container. Region model and transactional create-from-region land in the API
   tiers first; the first Svelte island (the annotator) arrives with its build
   toolchain; everything else stays server-rendered.
+
+### Phase 9 — Label hardware: Brother PT-P750W *(tenth milestone — detail below)*
+- Independent of Phase 8 and may run before or alongside it — the printer is in hand
+  (2026-08-08) and every stage except the final physical smoke tests without hardware.
+- Realize label-pipeline stages 1–3 for real: Java2D compose → Brother raster encode →
+  TCP 9100 transport, wired as a `LabelPrinter` implementation selected by config;
+  finish with the physical smoke (print a label, phone-scan the QR into `/i/{id}`).
 
 ## First milestone (Phase 1, implementable detail)
 
@@ -444,6 +452,44 @@ wholesale (photographing a shelf is the most phone-shaped feature in the plan).*
    `quarkus dev` — upload photo, draw box, name it, see the new item contained in the
    space's container with the region linked; aggregator green.
 
+## Tenth milestone (Phase 9: Brother PT-P750W label printing)
+
+*Added 2026-08-08. The vendor unknown is resolved (decision row above); the printer is
+physically available. Stages 1–3 are fully testable without it; only step 5 needs the
+device.*
+
+1. **`inventory-impl`** — the pipeline stages as plain classes (CDI-light, like the
+   other impl code):
+   - `LabelComposer` (stage 1): item name/id + QR `BitMatrix` → 1-bit label bitmap via
+     Java2D, sized for the P750W head (height = 128 dots at 180 dpi for 24 mm TZe,
+     parameterized for narrower tapes; width grows with content). Golden-file
+     snapshot tests.
+   - `BrotherRasterEncoder` (stage 2): 1-bit bitmap → Brother raster command bytes
+     per the official Raster Command Reference (invalidate, initialize, mode/media
+     switches, one raster line per column, print-and-feed). Unit tests assert exact
+     command bytes for known bitmaps.
+   - `Tcp9100Transport` (stage 3): bytes → host:port over a plain socket. Tested
+     against the *fake printer* (an ephemeral-port capture server, same pattern as
+     web-api's `StubBackend`).
+   - `BrotherPTouchPrinter implements LabelPrinter` composing the three, plus config:
+     `inventory.printer=log|brother-p750w` (default stays `log`),
+     `inventory.printer.host`, `inventory.printer.port` (default 9100),
+     `inventory.printer.tape-mm` (default 24).
+2. **`inventory-server`** — the backend producer selects the `LabelPrinter` by
+   `inventory.printer` (same switch pattern as `inventory.storage`); `print-label`
+   endpoint and `label.print` audit are already in place and unchanged.
+3. **Native**: compose/encode are pure Java2D + byte arrays (already covered by the
+   quarkus-awt work); confirm the golden-file check passes identically in the native
+   container (same curl smoke as Phase 7, now asserting real raster bytes reach the
+   fake printer).
+4. **Compose stack**: printer host/port arrive via environment; the fake printer can
+   run as a compose service for end-to-end tests without hardware.
+5. **Hardware smoke** (the only step needing the device, RUNBOOK checklist): point
+   `inventory.printer.host` at the P750W on the LAN, `POST .../print-label`, and
+   phone-scan the printed QR — it must resolve through `/i/{id}` to the item page.
+   First physical gate: an ~18 mm QR from 24 mm tape scans reliably; if not, iterate
+   module size/quiet zone in the composer before anything else.
+
 ## Label pipeline and printer testing
 
 *Added 2026-08-06. The label path decomposes into four stages; the first three are fully
@@ -462,9 +508,10 @@ the native/Linux constraint applies only to the shipped binary, never to develop
    asserted like any other fixture. macOS also runs CUPS natively, so a local file-backed
    print queue covers IPP/queue-based printers for manual checks.
 4. **Hardware** — the only stage requiring metal: a manual smoke checklist in the Phase 7
-   runbook, deferred until the printer vendor (open unknown) is chosen. The vendor choice
-   gates only stages 2 and 4's specifics — never the architecture, which stays behind the
-   existing `LabelPrinter` interface.
+   runbook. *(Resolved 2026-08-08: the vendor is the Brother PT-P750W — see the decision
+   row and the tenth milestone; stage 2's first real dialect is Brother raster, with ZPL
+   kept as the Labelary-testable reference.)* The architecture stays behind the existing
+   `LabelPrinter` interface regardless.
 
 ## Verification
 
@@ -487,11 +534,17 @@ the native/Linux constraint applies only to the shipped binary, never to develop
 - Phase 8 gate: in `quarkus dev` — upload a space photo, draw a box, name it, and the
   new item exists, contained in the space's container, with its region linked and an
   `item.create-from-region` audit row; `mvn verify` runs the island build and its tests.
+- Phase 9 gate: without hardware — golden-file compose tests, exact-byte raster encoder
+  tests, and the fake-9100 capture test all green (JVM and native). With hardware — a
+  printed label whose QR phone-scans through `/i/{id}` to the item page.
 
 ## Open unknowns (tracked, not blocking)
 
 - iOS/Android app stack and timeline (README: "eventually").
-- Label-printer protocols/vendors to support.
+- ~~Label-printer protocols/vendors to support~~ — resolved 2026-08-08: Brother
+  PT-P750W first (raster protocol over TCP 9100); ZPL remains the reference dialect for
+  a future Zebra-class device. Open sub-question: whether ~18 mm QRs on 24 mm tape scan
+  reliably enough, or labels need larger media (answered by the Phase 9 hardware smoke).
 - Deployment target among swarm/nomad/k8s (manifests kept portable until chosen).
 - Asset storage backend (object store vs. Postgres) — decided in Phase 3.
 - ~~Long-term web UI framework/language~~ — decided 2026-08-07 (Web UI direction row):

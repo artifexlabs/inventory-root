@@ -87,11 +87,18 @@ docker compose run --rm migrate --url=jdbc:postgresql://postgres:5432/inventory 
   rollback-count 1
 ```
 
-## Hardware label-printer smoke (deferred)
+## Hardware label-printer smoke (Brother PT-P750W)
 
-Blocked on the printer-vendor unknown. When a printer exists: point the (future)
-transport at it, run the smoke flow's `print-label` step, and confirm a physical
-label with a scannable QR that deep-links to `/i/{id}`.
+Vendor resolved 2026-08-08: Brother PT-P750W (Wi-Fi, raw TCP 9100, Brother raster
+protocol; TZe tape ≤ 24 mm at 180 dpi). Once the Phase 9 pipeline lands:
+
+1. Put the P750W on the LAN (its print server listens on TCP 9100); note its IP.
+2. Configure the server: `INVENTORY_PRINTER=brother-p750w`,
+   `INVENTORY_PRINTER_HOST=<printer-ip>` (port defaults to 9100, tape to 24 mm).
+3. Run the smoke flow's `print-label` step against a real item.
+4. Gate: the printed label's QR phone-scans and resolves through `/i/{id}` to the
+   item page. If an ~18 mm QR won't scan reliably, iterate module size / quiet zone
+   in the composer before anything else.
 
 ## Notes
 
