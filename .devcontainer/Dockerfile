@@ -12,8 +12,12 @@ FROM eclipse-temurin:21-jdk-jammy
 # ibparent's enforcer requires >= 3.9.16; keep in step with the dev machines.
 ARG MAVEN_VERSION=3.9.16
 
+# fontconfig + DejaVu mirror the server's native runtime image: AWT label
+# composition renders text, and golden-file tests must rasterize with the
+# same fonts the production container uses (macOS glyphs differ).
 RUN apt-get update && apt-get install -y --no-install-recommends \
       git curl ca-certificates unzip zip file gnupg jq \
+      fontconfig fonts-dejavu-core \
     && install -m 0755 -d /etc/apt/keyrings \
     && curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc \
     && echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu jammy stable" \
