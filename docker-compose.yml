@@ -1,0 +1,90 @@
+# Native-image deployment of the whole inventory stack. Portable compose —
+# the same containers run under swarm/nomad/k8s once a target is chosen.
+#
+# Bring-up:  docker compose up -d          (migrate runs Liquibase, then exits 0)
+# Smoke:     see RUNBOOK.md
+# Teardown:  docker compose down           (add -v to ALSO destroy the database)
+services:
+
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: inventory
+      POSTGRES_USER: inventory
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-inventory}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U inventory -d inventory"]
+      interval: 2s
+      timeout: 2s
+      retries: 15
+
+  # Controlled schema migration (the day-2 path): Liquibase CLI over the
+  # changelogs that live in inventory-impl. Runs to completion, then exits.
+  migrate:
+    image: liquibase/liquibase:4.29
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./inventory-impl/src/main/resources:/liquibase/changelog:ro
+    command: >
+      --url=jdbc:postgresql://postgres:5432/inventory
+      --username=inventory --password=${POSTGRES_PASSWORD:-inventory}
+      --search-path=/liquibase/changelog
+      --changelog-file=db/changelog-master.yaml
+      update
+
+  inventory-server:
+    build:
+      context: inventory-server
+      dockerfile: src/main/docker/Dockerfile.native
+    image: inventory-server:native
+    environment:
+      INVENTORY_STORAGE: pg
+      QUARKUS_DATASOURCE_REACTIVE_URL: postgresql://postgres:5432/inventory
+      QUARKUS_DATASOURCE_USERNAME: inventory
+      QUARKUS_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-inventory}
+      QUARKUS_DEVSERVICES_ENABLED: "false"
+      INVENTORY_QR_BASE_URL: http://localhost:8082
+      INVENTORY_ADMIN_EMAIL: ${INVENTORY_ADMIN_EMAIL:-admin@example.com}
+      INVENTORY_ADMIN_PASSWORD: ${INVENTORY_ADMIN_PASSWORD:-change-me}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    ports:
+      - "8080:8080"
+
+  inventory-web-api:
+    build:
+      context: inventory-web-api
+      dockerfile: src/main/docker/Dockerfile.native
+    image: inventory-web-api:native
+    environment:
+      INVENTORY_SERVER_URL: http://inventory-server:8080
+    depends_on:
+      - inventory-server
+    ports:
+      - "8081:8081"
+
+  inventory-webapp:
+    build:
+      context: inventory-webapp
+      dockerfile: src/main/docker/Dockerfile.native
+    image: inventory-webapp:native
+    environment:
+      INVENTORY_WEB_API_URL: http://inventory-web-api:8081
+      # prod profile keeps OIDC disabled; the "oidc" profile (plus the
+      # QUARKUS_OIDC_* secrets from the workspace .env) turns Google login on.
+      QUARKUS_PROFILE: prod
+      INVENTORY_WEBAPP_SESSION_FILE: none
+    depends_on:
+      - inventory-web-api
+    ports:
+      - "8082:8082"
+
+volumes:
+  pgdata:

@@ -111,7 +111,24 @@ eventually — iOS/Android clients.
 - Per the web-UI-direction decision: shaping lives here, business rules stay in
   inventory-server, and everything added serves the future mobile apps identically.
 
-### Phase 7 — Native and deploy *(was Phase 5, then 6; now follows the BFF work — swapped 2026-08-07)*
+### Phase 7 — Native and deploy *(was Phase 5, then 6; swapped 2026-08-07)* — EXECUTED 2026-08-07
+
+*As built: all three apps compile to native and run as containers; the full smoke flow
+(login, CRUD, `qr.png` + zxing decode of the deep link, `print-label` 204, BFF view,
+browser login/items/detail/deep-link through the native webapp) passes against the
+compose stack, and warm + cold restart drills lose no data. Native fixes found on the
+way: `Ulid`'s static `SecureRandom` marked initialize-at-run-time (shipped as
+`META-INF/native-image` metadata in inventory-impl); `InventoryBackendProducer` reads
+config lazily via `ConfigProvider` because native static-init froze field-injected
+values at build-time defaults (`storage=memory` inside a pg container); runtime images
+must be UBI9 to match the Mandrel builder's glibc; the server image ships the
+`libawt*.so` set the AWT native build emits, with `-Djava.library.path=/work`, plus
+fontconfig + dejavu fonts. Deployment is `docker-compose.yml` at the root (portable
+reference; swarm/nomad/k8s still open) with a Liquibase-CLI `migrate` service — the
+day-2 migration path — running before the server. Clustered event bus deliberately NOT
+configured: no inter-service event-bus traffic exists (services speak HTTP). Runbook:
+[RUNBOOK.md](RUNBOOK.md). Hardware label-printer smoke remains deferred on the vendor
+unknown.*
 - **AWT-in-native via `quarkus-awt`** (per the label/QR rendering decision above): add
   the extension to inventory-server; container image gains fonts + fontconfig (e.g.
   dejavu) so text renders in native; macOS flow is
