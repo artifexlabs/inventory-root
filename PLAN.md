@@ -404,6 +404,14 @@ the UI tier where mobile apps cannot reuse it. As built (one deviation, noted be
    from exactly ONE view call (stub counter) — plus search behavior. Full aggregator
    `mvn verify` green across all six modules.
 
+## Phase 7 (native and deploy) — no separate milestone section
+
+*Phase 7 has no ordinal milestone of its own: its implementable detail and its as-built
+record (executed 2026-08-07) live directly in the roadmap entry above, and its day-2
+procedures live in [RUNBOOK.md](RUNBOOK.md). Listed here only so the milestone sections
+read continuously — the phase sequence is 6 (eighth milestone) → 7 (roadmap only) → 8
+(ninth milestone).*
+
 ## Ninth milestone (Phase 8: spatial annotation)
 
 *Added 2026-08-07. Photo of a space → drawn boxes → items/containers. API-first: the
