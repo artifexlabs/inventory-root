@@ -64,7 +64,7 @@ eventually — iOS/Android clients.
 | [inventory-impl/](inventory-impl/) | Default implementations: Postgres repositories, transactional `InventorySystem`, audit sink, Liquibase changelogs. CDI beans, minimal Quarkus coupling. |
 | [inventory-server/](inventory-server/) | Quarkus service host: REST resources exposing `InventorySystem`, OpenAPI (`quarkus-smallrye-openapi`), event-bus consumers, token auth, health probes. |
 | [inventory-web-api/](inventory-web-api/) *(formerly `inventory-webapp`; artifact renamed 2026-08-07)* | Quarkus app: the browser-facing API tier — today a transparent `/api/v1/*` gateway to inventory-server (no HTML, no session state); Phase 6 thickens it into an aggregating BFF (page-shaped payloads, pagination, derived display fields) serving web and future mobile clients. |
-| [inventory-mobile-apps/](inventory-mobile-apps/) *(new 2026-08-09; org `lawfulevilorg`, unlike the `mykelalvis` server-side repos)* | Umbrella submodule holding the per-platform mobile apps as nested submodules: `inventory-ios-app` (Phase 12, SwiftUI universal) and `inventory-android-app` (later phase, stack open). Not Maven; not in the aggregator. Placeholder commits only until their phases execute; all three `lawfulevilorg` remotes are empty until the first authorized push. |
+| [inventory-mobile-apps/](inventory-mobile-apps/) *(new 2026-08-09; org `lawfulevilorg`, unlike the `mykelalvis` server-side repos)* | Umbrella submodule holding the per-platform mobile apps as nested submodules: `inventory-ios-app` (SwiftUI universal, compiling skeleton) and `inventory-android-app` (**Kotlin + Jetpack Compose** — stack decided 2026-08-09 with its compiling skeleton). Not Maven; not in the aggregator — built via `just mobile-build` (= `ios-build` + `android-build`). |
 | [inventory-web-app/](inventory-web-app/) *(new 2026-08-07; directory renamed from `inventory-webapp` 2026-08-09 to match the GitHub repo)* | Quarkus app: the web UI (extracted from `inventory-web-api` in Phase 5) — Qute pages over Pico.css + design tokens, session cookie + OIDC dance, calling web-api only. Gains Svelte islands (Phase 8) for interactive surfaces. |
 
 ## Roadmap
@@ -670,11 +670,12 @@ the native/Linux constraint applies only to the shipped binary, never to develop
 
 ## Open unknowns (tracked, not blocking)
 
-- iOS/Android app stack and timeline (README: "eventually"). Credentials/tooling are
-  Phase 11 ([MOBILE-READINESS.md](MOBILE-READINESS.md)); the iOS half is now decided —
-  native SwiftUI universal app, Phase 12 — while the Android stack stays open (decided
-  at its own phase, need not match iOS). When mobile CI arrives, iOS needs macOS
-  runners — the Phase 10 devcontainer covers only the Linux-friendly lanes.
+- ~~iOS/Android app stack~~ — both decided 2026-08-09 with compiling skeletons:
+  native SwiftUI universal (iOS, Phase 12) and native Kotlin + Jetpack Compose
+  (Android, its own phase). Remaining open: mobile app timeline/scope beyond the
+  skeletons. When mobile CI arrives, iOS needs macOS runners — the Phase 10
+  devcontainer covers only the Linux-friendly lanes (Android's Gradle build could
+  join Linux CI once the SDK is added to the image).
 - ~~Label-printer protocols/vendors to support~~ — resolved 2026-08-08: Brother
   PT-P750W first (raster protocol over TCP 9100); ZPL remains the reference dialect for
   a future Zebra-class device. Open sub-question: whether ~18 mm QRs on 24 mm tape scan

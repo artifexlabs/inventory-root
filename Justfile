@@ -203,7 +203,7 @@ ios-regen:
     @echo "-> delegating to XcodeGen: regenerating {{ ios_app_dir }}/InventoryApp.xcodeproj"
     cd {{ ios_app_dir }} && xcodegen generate
 
-# Build the Android app (placeholder repo today: no-op until its phase scaffolds Gradle).
+# Build the Android app (Kotlin + Compose; delegates to the Gradle wrapper).
 [group('mobile')]
 android-build:
     #!/usr/bin/env bash

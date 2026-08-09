@@ -46,13 +46,13 @@ NOT chosen here — that remains an open unknown; nothing below forecloses any s
       `xcodebuild -downloadPlatform iOS` (modern Xcode ships without the iOS
       platform; no sudo needed). *Verify:* `xcrun simctl list runtimes` lists
       iOS 26.3. `just ios-build` compiles the skeleton app — verified green.
-- [ ] **Android Studio + SDK** — ABSENT (no `/Applications/Android Studio.app`, no
-      `~/Library/Android/sdk`, no `adb`, `ANDROID_HOME` unset). Install Android
-      Studio (`brew install --cask android-studio` or download), let its setup wizard
-      install the SDK + platform-tools + an emulator image, and export
-      `ANDROID_HOME=$HOME/Library/Android/sdk` with `platform-tools` on PATH.
-      *Verify:* `adb version` works and `sdkmanager --list_installed` shows a
-      platform + build-tools.
+- [x] **Android SDK** — INSTALLED 2026-08-09 via `android-commandlinetools` (brew
+      cask; no Studio needed for headless builds): platform-tools, platform 35,
+      build-tools 35.0.0 at `/usr/local/share/android-commandlinetools`, licenses
+      accepted, `local.properties` points the app at it. `just android-build`
+      compiles the Kotlin+Compose skeleton — verified green. *(Android Studio
+      itself remains optional/uninstalled — install it if/when IDE work wants it:
+      `brew install --cask android-studio`.)*
 - [ ] **Android emulator or physical device** boots and `adb devices` sees it
       (physical device: enable developer mode + USB debugging).
 - [ ] **Node.js LTS** — absent; required ONLY if the (undecided) stack is
