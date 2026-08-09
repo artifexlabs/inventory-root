@@ -23,7 +23,7 @@ eventually — iOS/Android clients.
 | IDs | **ULID strings** | 26 chars, lexically sortable (index-friendly), compact enough for small QR codes. QR encodes `https://<host>/i/{id}`. `Item.getId()` stays `String`. |
 | Web tier split | **`inventory-web-api` (API) + new `inventory-webapp` (UI)** *(added 2026-08-07)* | The original `inventory-webapp` module was renamed to `inventory-web-api` (GitHub repo, directory, and Maven artifact). A new `inventory-webapp` module (fresh repo, Quarkus/Maven skeleton building and testing like its siblings) receives the actual web UI in Phase 5, leaving `inventory-web-api` as the pure browser-facing API tier (sessions, login/OIDC exchange, JSON the UI consumes). Rationale: with the UI isolated behind a JSON contract, it can be restyled or wholesale replaced later — different framework, even a different language — without touching any API tier. |
 | Web UI direction | **Island architecture: Qute shell + Svelte islands; thick web-api, thin frontend** *(decided 2026-08-07)* | Planned interactions (photo annotation — draw boxes on a space picture and turn them into items/containers — and more to come) are real client-side interactivity, but the app's majority remains server-rendered CRUD. So: keep the Qute/Pico shell; mount self-contained **Svelte** components compiled as custom elements exactly where interactivity is needed (`quarkus-web-bundler` keeps the npm build inside Maven, TypeScript for island code). If the app ever tips majority-interactive, islands migrate into **SvelteKit** — a gradient, not a rewrite cliff. (React islands were the considered alternative; rejected for now: heavier baseline, ecosystem weight not yet needed.) Complementary principle: **web-api thickens, frontend thins** — aggregation, pagination, derived display fields live in web-api (serving web and future mobile once); business rules stay in inventory-server; the webapp renders and holds the session. Boundary test: an `if` that changes what is *allowed* belongs in inventory-server; one that changes what is *shown* may live in web-api; the webapp only renders. |
-| Label printer hardware | **Brother PT-P750W first** *(decided 2026-08-08; printer in hand)* | Wi-Fi with a built-in print server accepting **raw TCP 9100** — exactly the transport stage 3 was designed around — and it speaks Brother's **documented** raster protocol (official Raster Command Reference; `ptouch-print` as OSS prior art), so the encode stage implements a spec instead of reverse-engineering. Constraints accepted: TZe tape ≤ 24 mm at 180 dpi (~128-dot head) → continuous strips, QR ≤ ~18 mm with text lengthwise; first physical gate is phone-scannability of an 18 mm QR. The DYMO MobileLabeler (1982171) was evaluated and rejected for system integration: Bluetooth-only, proprietary/undocumented app-oriented protocol, and Bluetooth-into-container plumbing — it stays a manual label maker. ZPL remains the recorded reference encoder, testable via Labelary only, until a Zebra-class printer exists. Everything stays behind `LabelPrinter`, so none of this forecloses other vendors. |
+| Label printer hardware | **Brother PT-P750W first** *(decided 2026-08-08; printer in hand)* | Wi-Fi with a built-in print server accepting **raw TCP 9100** — exactly the transport stage 3 was designed around — and it speaks Brother's **documented** raster protocol (official Raster Command Reference; `ptouch-print` as OSS prior art), so the encode stage implements a spec instead of reverse-engineering. Constraints accepted: TZe tape ≤ 24 mm at 180 dpi (~128-dot head) → continuous strips, QR ≤ ~18 mm with text lengthwise; first physical gate is phone-scannability of an 18 mm QR. The DYMO MobileLabeler (1982171) was evaluated and rejected for system integration: Bluetooth-only, proprietary/undocumented app-oriented protocol, and Bluetooth-into-container plumbing — it stays a manual label maker. **Second target (ordered 2026-08-09, arriving ~2026-08-13): Zebra GK420t** — thermal transfer (temperature-stable labels; polypropylene + wax/resin ribbon is the recommended media), 203 dpi, 4-inch die-cut stock, ZPL — which turns the recorded ZPL reference encoder into real hardware. On arrival, verify which connectivity variant it is: Ethernet gives the standard TCP-9100 transport; a USB-only unit needs a transport decision before integration. Everything stays behind `LabelPrinter`, so none of this forecloses other vendors. |
 | Label/QR rendering in native | **`quarkus-awt`** *(revised 2026-08-06; supersedes the pure-PNG-encoder decision of 2026-08-05)* | Labels will compose text and possibly other images alongside the QR — that is real Java2D (`Graphics2D`, fonts), which a bare PNG encoder cannot do. quarkus-awt makes AWT work in native images with Quarkus maintaining the metadata. Costs accepted: native images are Linux-only (the deploy target is Linux containers anyway) and the container image must carry fonts + fontconfig. macOS development is unaffected — headless AWT works fully on the JVM, so all dev and tests run on the Mac; native verification happens by container-building and container-running. If labels ever turn out to be QR-only after all, the pure-JDK 1-bit PNG encoder over zxing's `BitMatrix` remains the recorded simplification option. |
 
 ## Architecture
@@ -148,8 +148,11 @@ unknown.*
   toolchain; everything else stays server-rendered.
 
 ### Phase 9 — Label hardware: Brother PT-P750W *(tenth milestone — detail below)*
-- Independent of Phase 8 and may run before or alongside it — the printer is in hand
-  (2026-08-08) and every stage except the final physical smoke tests without hardware.
+- Independent of Phase 8 and may run before or alongside it — the P750W is physically
+  available as of 2026-08-09, and every stage except the final physical smoke tests
+  without hardware. The Zebra GK420t (second target, ZPL, ~2026-08-13) extends this
+  milestone with a `ZplEncoder` + `ZebraPrinter` once it arrives — same compose stage,
+  same transport if it is the Ethernet variant.
 - Realize label-pipeline stages 1–3 for real: Java2D compose → Brother raster encode →
   TCP 9100 transport, wired as a `LabelPrinter` implementation selected by config;
   finish with the physical smoke (print a label, phone-scan the QR into `/i/{id}`).
@@ -540,6 +543,13 @@ device.*
    phone-scan the printed QR — it must resolve through `/i/{id}` to the item page.
    First physical gate: an ~18 mm QR from 24 mm tape scans reliably; if not, iterate
    module size/quiet zone in the composer before anything else.
+6. **Zebra GK420t extension** (on arrival, ~2026-08-13): `ZplEncoder` (stage 2, the
+   reference dialect — `^GFA` graphic field from the same 1-bit bitmap, eyeballable
+   via Labelary during development) and `inventory.printer=zebra-gk420t` wiring.
+   Confirm the connectivity variant first: Ethernet reuses `Tcp9100Transport`
+   unchanged; USB-only requires a transport decision (record it when taken). Die-cut
+   media sizing enters the composer as a second label geometry (width × height
+   instead of fixed-height continuous tape).
 
 ## Label pipeline and printer testing
 
