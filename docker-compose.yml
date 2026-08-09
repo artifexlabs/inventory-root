@@ -70,11 +70,11 @@ services:
     ports:
       - "8081:8081"
 
-  inventory-webapp:
+  inventory-web-app:
     build:
-      context: inventory-webapp
+      context: inventory-web-app
       dockerfile: src/main/docker/Dockerfile.native
-    image: inventory-webapp:native
+    image: inventory-web-app:native
     environment:
       INVENTORY_WEB_API_URL: http://inventory-web-api:8081
       # prod profile keeps OIDC disabled; the "oidc" profile (plus the

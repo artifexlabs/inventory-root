@@ -46,7 +46,7 @@ native module:
 
 # Native executables for all three apps.
 [group('build')]
-natives: (native "inventory-server") (native "inventory-web-api") (native "inventory-webapp")
+natives: (native "inventory-server") (native "inventory-web-api") (native "inventory-web-app")
 
 # Container images from the native executables.
 [group('build')]

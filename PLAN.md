@@ -64,7 +64,7 @@ eventually — iOS/Android clients.
 | [inventory-impl/](inventory-impl/) | Default implementations: Postgres repositories, transactional `InventorySystem`, audit sink, Liquibase changelogs. CDI beans, minimal Quarkus coupling. |
 | [inventory-server/](inventory-server/) | Quarkus service host: REST resources exposing `InventorySystem`, OpenAPI (`quarkus-smallrye-openapi`), event-bus consumers, token auth, health probes. |
 | [inventory-web-api/](inventory-web-api/) *(formerly `inventory-webapp`; artifact renamed 2026-08-07)* | Quarkus app: the browser-facing API tier — today a transparent `/api/v1/*` gateway to inventory-server (no HTML, no session state); Phase 6 thickens it into an aggregating BFF (page-shaped payloads, pagination, derived display fields) serving web and future mobile clients. |
-| [inventory-webapp/](inventory-webapp/) *(new 2026-08-07)* | Quarkus app: the web UI (extracted from `inventory-web-api` in Phase 5) — Qute pages over Pico.css + design tokens, session cookie + OIDC dance, calling web-api only. Gains Svelte islands (Phase 8) for interactive surfaces. |
+| [inventory-web-app/](inventory-web-app/) *(new 2026-08-07; directory renamed from `inventory-webapp` 2026-08-09 to match the GitHub repo)* | Quarkus app: the web UI (extracted from `inventory-web-api` in Phase 5) — Qute pages over Pico.css + design tokens, session cookie + OIDC dance, calling web-api only. Gains Svelte islands (Phase 8) for interactive surfaces. |
 
 ## Roadmap
 
@@ -678,6 +678,7 @@ the native/Linux constraint applies only to the shipped binary, never to develop
 - ~~Long-term web UI framework/language~~ — decided 2026-08-07 (Web UI direction row):
   island architecture, Svelte islands, SvelteKit only at a majority-interactive tipping
   point. Remaining sub-unknown: none until an island exists; revisit after Phase 8.
-- Repo naming caution: the `inventory-webapp` module pushes to
-  `github.com/mykelalvis/inventory-web-app` (hyphenated). The unhyphenated
-  `inventory-webapp` GitHub URL is a redirect to `inventory-web-api` — never push to it.
+- Repo naming caution *(mostly resolved 2026-08-09: the directory was renamed to
+  `inventory-web-app`, matching its GitHub repo)*: the unhyphenated `inventory-webapp`
+  GitHub URL is still a redirect to `inventory-web-api` — never push to it. The Maven
+  artifactId remains `inventory-webapp` (rename it deliberately if ever desired).

@@ -14,6 +14,6 @@
     <module>inventory-impl</module>
     <module>inventory-server</module>
     <module>inventory-web-api</module>
-    <module>inventory-webapp</module>
+    <module>inventory-web-app</module>
   </modules>
 </project>

@@ -34,7 +34,7 @@ Configuration comes from the environment (or `.env`, which just auto-loads):
 ```sh
 mvn -pl inventory-server  -am package -DskipTests -Dnative -Dquarkus.native.container-build=true
 mvn -pl inventory-web-api -am package -DskipTests -Dnative -Dquarkus.native.container-build=true
-mvn -pl inventory-webapp  -am package -DskipTests -Dnative -Dquarkus.native.container-build=true
+mvn -pl inventory-web-app -am package -DskipTests -Dnative -Dquarkus.native.container-build=true
 docker compose build
 ```
 
