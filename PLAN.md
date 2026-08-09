@@ -506,11 +506,14 @@ wholesale (photographing a shelf is the most phone-shaped feature in the plan).*
    `quarkus dev` — upload photo, draw box, name it, see the new item contained in the
    space's container with the region linked; aggregator green.
 
-## Tenth milestone (Phase 9: Brother PT-P750W label printing)
+## Tenth milestone (Phase 9: Brother PT-P750W label printing) — stages 1–3 EXECUTED 2026-08-09
 
-*Added 2026-08-08. The vendor unknown is resolved (decision row above); the printer is
-physically available. Stages 1–3 are fully testable without it; only step 5 needs the
-device.*
+*Added 2026-08-08; stages 1–3 built and tested 2026-08-09 exactly as specified below
+(one refinement: the golden label PNG is generated INSIDE the devcontainer so it pins
+the Linux/DejaVu rendering production uses; the exact-pixel comparison runs on Linux
+and platform-neutral invariants run everywhere). Remaining: step 5 (hardware smoke —
+printer on the LAN, `inventory.printer=brother-p750w`, phone-scan the label; the
+raster constants' final authority) and step 6 (Zebra, on arrival).*
 
 1. **`inventory-impl`** — the pipeline stages as plain classes (CDI-light, like the
    other impl code):
