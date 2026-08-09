@@ -4,6 +4,30 @@
 machine with Docker; macOS included (native builds happen inside Linux builder
 containers).*
 
+## Task runner: the Justfile is the executor of record
+
+*Since 2026-08-09 every task below is executed via the [Justfile](Justfile) so the
+procedures stay verified instead of drifting as prose. The shell detail in each
+section remains as the narrative of what the recipe does — but run the recipe.*
+`just` (no arguments) lists all tasks; requires **just ≥ 1.58** (installed locally
+and in the devcontainer). Recipes that merely delegate to Maven say so in their
+output.
+
+| Runbook section | Recipe(s) |
+|---|---|
+| Build native images | `just native <module>` · `just natives` · `just images` · `just build-all` |
+| JVM build + tests | `just verify` *(delegates to `mvn -B verify`)* |
+| Bring up / tear down | `just up` · `just ps` · `just logs [service]` · `just down` · `just destroy` *(confirm-gated)* |
+| Smoke flow | `just smoke` *(asserts each step, ends `SMOKE PASS`)* |
+| Restart drills | `just drill-warm` · `just drill-cold` · `just drill-empty` *(confirm-gated)* |
+| Backup / restore | `just backup [file]` *(dated filename by default)* · `just restore <file>` *(confirm-gated)* |
+| Migrations | `just migrate` · `just rollback [count]` *(confirm-gated)* |
+| Hardware printer smoke | `just print-label <item-id>` after configuring the printer env |
+
+Configuration comes from the environment (or `.env`, which just auto-loads):
+`INVENTORY_SERVER_URL`, `INVENTORY_WEB_API_URL`, `INVENTORY_ADMIN_EMAIL`,
+`INVENTORY_ADMIN_PASSWORD`, `POSTGRES_PASSWORD` — defaults match the compose stack.
+
 ## Build native images
 
 ```sh

@@ -31,6 +31,11 @@ RUN curl -fsSL "https://archive.apache.org/dist/maven/maven-3/${MAVEN_VERSION}/b
     && ln -s /opt/apache-maven-${MAVEN_VERSION} /opt/maven \
     && ln -s /opt/maven/bin/mvn /usr/local/bin/mvn
 
+# just: the workspace task runner (Justfile at the repo root gates on >= 1.58).
+ARG JUST_VERSION=1.58.0
+RUN curl --proto '=https' --tlsv1.2 -fsSL https://just.systems/install.sh \
+      | bash -s -- --tag ${JUST_VERSION} --to /usr/local/bin
+
 ENV MAVEN_HOME=/opt/maven
 
 # Non-root user for Dev Containers ("remoteUser": "vscode"). GitHub Actions
