@@ -126,11 +126,12 @@ to the server (defaults keep the `log` printer).
    `INVENTORY_PRINTER_HOST=<printer-ip>` (port defaults to 9100, tape to 24 mm) —
    both live in the workspace `.env`.
 3. Run the smoke flow's `print-label` step against a real item.
-4. Gate (OPEN — human step): the printed label's QR phone-scans and resolves through
-   `/i/{id}` to the item page. If an ~18 mm QR won't scan reliably, iterate module
-   size / quiet zone in the composer before anything else. (Note: a label printed
-   from a dev-mode server encodes the dev `qr-base-url` — the scan shows the URL
-   pattern, but resolving end-to-end needs the stack up and the phone on the LAN.)
+4. Gate (PASSED 2026-08-09): both smoke labels scanned reliably on an iPhone 15 Pro —
+   the ~18 mm QR from 24 mm tape needs no module-size/quiet-zone iteration. (A label
+   printed from a dev-mode server encodes the dev `qr-base-url`; full `/i/{id}`
+   resolution needs the stack up and the phone on the LAN — re-run this smoke once
+   against the compose stack after rebuilding the native server image, which
+   currently predates the label pipeline: `just native inventory-server && just images`.)
 
 ## iOS app build (Phase 12 — inventory-mobile-apps/inventory-ios-app)
 

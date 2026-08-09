@@ -572,9 +572,13 @@ proxy is dead — the audit step threw `ContextNotActiveException` and the endpo
 dispatch; regression-locked by `BrotherPrinterModeTest` (dedicated `@TestProfile`
 running the REAL `BrotherPTouchPrinter` against `FakeRasterPrinterResource`, a local
 TCP sink that asserts the invalidate/ESC@ preamble and 0x1A terminator). Compose now
-passes `INVENTORY_PRINTER*` env through to the server (defaults keep `log`).
-Remaining in this milestone: the phone-scan gate on the printed label (human step —
-an ~18 mm QR from 24 mm tape must scan reliably) and step 6 (Zebra, on arrival).*
+passes `INVENTORY_PRINTER*` env through to the server (defaults keep `log`).*
+
+***Phone-scan gate PASSED (2026-08-09)***: *both printed labels scanned reliably on
+an iPhone 15 Pro and were visually identical — the ~18 mm QR from 24 mm tape needs
+no composer iteration. The Brother P750W path is DONE end to end: compose → encode →
+TCP 9100 → hardware → phone scan. Remaining in this milestone: step 6 only (Zebra
+GK420t, arriving ~2026-08-13).*
 
 1. **`inventory-impl`** — the pipeline stages as plain classes (CDI-light, like the
    other impl code):
