@@ -788,3 +788,7 @@ the native/Linux constraint applies only to the shipped binary, never to develop
   `inventory-web-api` — never push to it. The Java package
   (`org.lawfulevil.inventory.webapp`) and the `inventory.webapp.*` config keys keep
   the old spelling deliberately — renaming those is behavioral, not cosmetic.
+  *(Bite recorded 2026-08-09: a stale pre-rename `inventory-webapp-*-runner` binary
+  lingered in target/, and Dockerfile.native's `COPY target/*-runner` glob matched
+  BOTH — the stale one sorted last and silently won, shipping a pre-island native
+  image. Removed; `mvn clean` after renames, or tighten the glob, prevents a repeat.)*
