@@ -115,15 +115,22 @@ docker compose run --rm migrate --url=jdbc:postgresql://postgres:5432/inventory 
 ## Hardware label-printer smoke (Brother PT-P750W)
 
 Vendor resolved 2026-08-08: Brother PT-P750W (Wi-Fi, raw TCP 9100, Brother raster
-protocol; TZe tape ≤ 24 mm at 180 dpi). Once the Phase 9 pipeline lands:
+protocol; TZe tape ≤ 24 mm at 180 dpi). **Steps 1–3 PASSED 2026-08-09**: printer on
+the LAN at 10.0.1.130 (in the workspace `.env` — update there if DHCP moves it),
+`just print-label` printed a physical 414-line label and returned 204 with the
+`label.print` audit row. The compose stack forwards `INVENTORY_PRINTER*` from `.env`
+to the server (defaults keep the `log` printer).
 
 1. Put the P750W on the LAN (its print server listens on TCP 9100); note its IP.
 2. Configure the server: `INVENTORY_PRINTER=brother-p750w`,
-   `INVENTORY_PRINTER_HOST=<printer-ip>` (port defaults to 9100, tape to 24 mm).
+   `INVENTORY_PRINTER_HOST=<printer-ip>` (port defaults to 9100, tape to 24 mm) —
+   both live in the workspace `.env`.
 3. Run the smoke flow's `print-label` step against a real item.
-4. Gate: the printed label's QR phone-scans and resolves through `/i/{id}` to the
-   item page. If an ~18 mm QR won't scan reliably, iterate module size / quiet zone
-   in the composer before anything else.
+4. Gate (OPEN — human step): the printed label's QR phone-scans and resolves through
+   `/i/{id}` to the item page. If an ~18 mm QR won't scan reliably, iterate module
+   size / quiet zone in the composer before anything else. (Note: a label printed
+   from a dev-mode server encodes the dev `qr-base-url` — the scan shows the URL
+   pattern, but resolving end-to-end needs the stack up and the phone on the LAN.)
 
 ## iOS app build (Phase 12 — inventory-mobile-apps/inventory-ios-app)
 

@@ -50,6 +50,12 @@ services:
       INVENTORY_QR_BASE_URL: http://localhost:8082
       INVENTORY_ADMIN_EMAIL: ${INVENTORY_ADMIN_EMAIL:-admin@example.com}
       INVENTORY_ADMIN_PASSWORD: ${INVENTORY_ADMIN_PASSWORD:-change-me}
+      # Label printer (Phase 9): defaults to the log printer; set
+      # INVENTORY_PRINTER=brother-p750w + INVENTORY_PRINTER_HOST in .env for hardware.
+      INVENTORY_PRINTER: ${INVENTORY_PRINTER:-log}
+      INVENTORY_PRINTER_HOST: ${INVENTORY_PRINTER_HOST:-}
+      INVENTORY_PRINTER_PORT: ${INVENTORY_PRINTER_PORT:-9100}
+      INVENTORY_PRINTER_TAPE_MM: ${INVENTORY_PRINTER_TAPE_MM:-24}
     depends_on:
       postgres:
         condition: service_healthy
