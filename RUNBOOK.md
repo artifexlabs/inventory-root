@@ -133,6 +133,22 @@ to the server (defaults keep the `log` printer).
    against the compose stack after rebuilding the native server image, which
    currently predates the label pipeline: `just native inventory-server && just images`.)
 
+## Web islands (Phase 8 — inventory-web-app/src/main/web)
+
+The item page's photo annotator (`<space-annotator>`) is a **Svelte custom
+element** built by Vite inside the Maven build: `frontend-maven-plugin` downloads
+its own Node (v20.18.1 — the HOST needs no Node), runs `npm install` + `vite
+build` at generate-resources, and `vitest` in the test phase. The bundle ships in
+the jar as `/islands/space-annotator.js`; `mvn verify` (and therefore
+`just verify`) remains the one command.
+
+- Sources: `inventory-web-app/src/main/web/` (`src/SpaceAnnotator.svelte`,
+  pure geometry in `src/annotator-core.ts`, vitest in `test/`).
+- Iterating: `cd inventory-web-app/src/main/web && PATH="$PWD/../../../target/node:$PATH" npm run dev`
+  (rebuild-on-change into target/classes; pair with `quarkus dev`).
+- Adding an island: new `.svelte` + entry import, or a second Vite entry; mount it
+  from a Qute template with a `<script type="module">` tag.
+
 ## iOS app build (Phase 12 — inventory-mobile-apps/inventory-ios-app)
 
 The mobile app is **not a Maven module**: it is a native Swift/SwiftUI universal

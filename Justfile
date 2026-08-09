@@ -37,7 +37,11 @@ default:
 [group('build')]
 verify:
     @echo "-> delegating to Maven: mvn -B verify (all six modules, JVM tests)"
-    mvn -B verify
+    # dotenv-load exports the workspace .env (wanted for stack recipes), but the
+    # OIDC secrets must NOT reach unit tests: OidcExchangeDisabledTest asserts
+    # the UNCONFIGURED behavior, and an inherited exchange secret configures it.
+    env -u QUARKUS_OIDC_CLIENT_ID -u QUARKUS_OIDC_CREDENTIALS_SECRET -u INVENTORY_OIDC_EXCHANGE_SECRET \
+      mvn -B verify
 
 # Native executable for one module, compiled in the Linux builder container.
 [group('build')]

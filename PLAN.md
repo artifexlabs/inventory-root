@@ -142,7 +142,7 @@ unknown.*
   manifests; clustered event-bus configuration; cold/warm restart drills; backup/restore
   and migration runbooks (day-2).
 
-### Phase 8 — Spatial annotation: photo → boxes → items *(ninth milestone — detail below)*
+### Phase 8 — Spatial annotation: photo → boxes → items *(ninth milestone — detail below; EXECUTED 2026-08-09)*
 - Upload a picture of a space, draw boxes on it, and turn each box into an
   item/container. Region model and transactional create-from-region land in the API
   tiers first; the first Svelte island (the annotator) arrives with its build
@@ -501,11 +501,54 @@ procedures live in [RUNBOOK.md](RUNBOOK.md). Listed here only so the milestone s
 read continuously — the phase sequence is 6 (eighth milestone) → 7 (roadmap only) → 8
 (ninth milestone).*
 
-## Ninth milestone (Phase 8: spatial annotation)
+## Ninth milestone (Phase 8: spatial annotation) — EXECUTED 2026-08-09
 
 *Added 2026-08-07. Photo of a space → drawn boxes → items/containers. API-first: the
 region model is valuable even with a crude UI, and the iOS/Android apps reuse it
 wholesale (photographing a shelf is the most phone-shaped feature in the plan).*
+
+***As built (2026-08-09)*** — *everything below landed as specified, with these
+recorded deviations/refinements:*
+
+- *Region ops live on a dedicated `RegionSystem` interface (not spread across the
+  asset/inventory interfaces): promotion spans both stores, and one interface keeps
+  the transaction in one place. `InMemoryRegionSystem` + `PgRegionSystem`; the pg
+  promotion (item + containment + region link + item.create/item.contain/
+  item.create-from-region audit rows) is ONE transaction.*
+- *Draw-then-describe is API-real: `POST /assets/{id}/regions` persists a BARE box;
+  `POST /regions/{id}/make-item` describes it later (404 once linked); the one-shot
+  `POST /assets/{id}/regions/make-item` also exists for API/mobile callers.
+  `DELETE /regions/{id}`; deleting an ITEM leaves its boxes bare (FK SET NULL);
+  deleting the asset removes them (CASCADE). Changesets 010 (asset_regions) + 011
+  (assets.latitude/longitude).*
+- *EXIF: the minimal dependency-free GPS parser (the plan's sanctioned fallback —
+  metadata-extractor passed over to keep native reflection-free). JPEG APP1 only,
+  best-effort by design; explicit `?lat=&long=` upload params win over EXIF; both
+  land on `AssetInfo.coordinates` (suggestion-only, per the Phase 8 addenda).*
+- ***Island toolchain deviation**: `frontend-maven-plugin` (pinned Node v20.18.1) +
+  Vite + Svelte 4, NOT quarkus-web-bundler — the bundler has no Svelte compilation
+  path. The property that mattered is preserved: `mvn verify` is still the one
+  command (Node auto-downloaded, npm install + vite build in generate-resources,
+  vitest in test), and the built island ships as a static file in the app jar
+  (`/islands/space-annotator.js`, ~28 KB, no runtime CDN). Sources in
+  `inventory-web-app/src/main/web/` with committed package-lock.*
+- *`<space-annotator>` (shadow-DOM custom element, attrs asset-id/item-id) renders
+  every image asset on the item page: SVG overlay, pointer drag → immediate bare-box
+  save, click → per-box describe form (name, type, "containing item" checkbox →
+  type=container), linked boxes green with a link to their item; unfilled boxes
+  persist across sessions. Session-cookie JSON endpoints on the webapp
+  (`RegionApiResource`) forward through `ServerClient`; islands get 401s, not login
+  redirects. Geometry is pure TS (`annotator-core.ts`) under vitest.*
+- *Tests: impl EXIF unit tests (synthetic GPS JPEGs); server memory-mode
+  `RegionsApiTest` (flow, audit, EXIF-vs-explicit) + pg-mode transactional region
+  test in `PgModeApiTest`; webapp `SpaceAnnotatorPagesTest` (island mounts for image
+  assets, bundle served, JSON surface through the session); 8 vitest geometry tests.
+  Full `just verify`: 161 JVM tests green. (Side find: `just verify` used to leak
+  the .env OIDC exchange secret into server tests, breaking
+  OidcExchangeDisabledTest — the recipe now runs Maven with those unset.)*
+- *Remaining human gate: the interactive drag-a-box-in-a-browser pass in
+  `quarkus dev` — the automated page/JSON tests cover everything up to the pointer
+  events.*
 
 1. **`inventory-api`** — `AssetRegion` (id, assetId, normalized rect x/y/w/h in 0–1 so
    coordinates survive any display size, optional linked itemId, label); region
