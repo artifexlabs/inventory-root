@@ -23,6 +23,7 @@ pg_password := env('POSTGRES_PASSWORD', 'inventory')
 native_flags := "-DskipTests -Dnative -Dquarkus.native.container-build=true"
 
 ios_app_dir := "inventory-mobile-apps/inventory-ios-app"
+android_app_dir := "inventory-mobile-apps/inventory-android-app"
 ios_scheme := env('INVENTORY_IOS_SCHEME', 'InventoryApp')
 ios_simulator := env('INVENTORY_IOS_SIMULATOR', 'iPhone 16')
 
@@ -194,6 +195,30 @@ ios-test: _ios-preflight
 [macos]
 ios-open: _ios-preflight
     open {{ ios_app_dir }}/*.xcodeproj 2>/dev/null || open {{ ios_app_dir }}/*.xcworkspace
+
+# Regenerate InventoryApp.xcodeproj from project.yml (XcodeGen is the source of truth).
+[group('mobile')]
+[macos]
+ios-regen:
+    @echo "-> delegating to XcodeGen: regenerating {{ ios_app_dir }}/InventoryApp.xcodeproj"
+    cd {{ ios_app_dir }} && xcodegen generate
+
+# Build the Android app (placeholder repo today: no-op until its phase scaffolds Gradle).
+[group('mobile')]
+android-build:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    if [ -x "{{ android_app_dir }}/gradlew" ]; then
+      echo "-> delegating to Gradle: {{ android_app_dir }}/gradlew build"
+      cd {{ android_app_dir }} && ./gradlew build
+    else
+      echo "NOTE: no Gradle wrapper in {{ android_app_dir }} — Android app not yet scaffolded (placeholder repo); nothing to build"
+    fi
+
+# Build ALL mobile apps (iOS + Android).
+[group('mobile')]
+[macos]
+mobile-build: ios-build android-build
 
 [macos]
 _ios-preflight:
