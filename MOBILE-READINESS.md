@@ -37,12 +37,15 @@ NOT chosen here — that remains an open unknown; nothing below forecloses any s
 - [x] **JDK 21** — present (`java -version` → openjdk 21.0.12, verified 2026-08-08).
 - [x] **Apple Command Line Tools** — present (16.4, verified 2026-08-08 via
       `pkgutil --pkg-info=com.apple.pkg.CLTools_Executables`).
-- [ ] **Full Xcode** — ABSENT (only CLT installed; `xcode-select -p` points at
-      CommandLineTools and `xcodebuild -version` fails). Install from the App Store,
-      then `sudo xcode-select -s /Applications/Xcode.app/Contents/Developer` and
-      accept the license. *Verify:* `xcodebuild -version` prints a version.
-- [ ] **iOS simulator runtime** — absent (comes with Xcode; add via Xcode → Settings →
-      Platforms). *Verify:* `xcrun simctl list runtimes` lists an iOS runtime.
+- [x] **Full Xcode** — INSTALLED 2026-08-09: Xcode 26.3 (17C529) via `.xip` from
+      developer.apple.com (the App Store path failed twice on this machine: a wedged
+      `installd`, then search hiding; the xip route is the reliable fallback —
+      download, `xip -x`, move to /Applications, `sudo xcode-select -s`, license,
+      `-runFirstLaunch`). *Verify:* `xcodebuild -version` → Xcode 26.3.
+- [x] **iOS simulator runtime** — INSTALLED 2026-08-09: iOS 26.3.1 via
+      `xcodebuild -downloadPlatform iOS` (modern Xcode ships without the iOS
+      platform; no sudo needed). *Verify:* `xcrun simctl list runtimes` lists
+      iOS 26.3. `just ios-build` compiles the skeleton app — verified green.
 - [ ] **Android Studio + SDK** — ABSENT (no `/Applications/Android Studio.app`, no
       `~/Library/Android/sdk`, no `adb`, `ANDROID_HOME` unset). Install Android
       Studio (`brew install --cask android-studio` or download), let its setup wizard

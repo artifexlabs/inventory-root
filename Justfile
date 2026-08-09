@@ -226,7 +226,7 @@ _ios-preflight:
     set -euo pipefail
     xcodebuild -version > /dev/null 2>&1 \
       || { echo "FAIL: full Xcode required (only Command Line Tools found) — see MOBILE-READINESS.md"; exit 1; }
-    ls {{ ios_app_dir }}/*.xcodeproj {{ ios_app_dir }}/*.xcworkspace > /dev/null 2>&1 \
+    compgen -G "{{ ios_app_dir }}/*.xcodeproj" > /dev/null || compgen -G "{{ ios_app_dir }}/*.xcworkspace" > /dev/null \
       || { echo "FAIL: no Xcode project in {{ ios_app_dir }} — Phase 12 (initial iOS app) not yet executed"; exit 1; }
 
 # --- backup / restore / migrations (day-2) -----------------------------------
