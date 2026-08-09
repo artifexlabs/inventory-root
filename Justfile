@@ -62,6 +62,31 @@ images:
 [group('build')]
 build-all: natives images
 
+# --- dev (live-coding; one terminal per tier) --------------------------------
+
+# Dev-mode prerequisite: quarkus:dev resolves inventory-api/impl from ~/.m2.
+_sync-libs:
+    @echo "-> delegating to Maven: installing inventory-api + inventory-impl to ~/.m2 (dev prerequisite)"
+    mvn -q -B -pl inventory-impl -am install -DskipTests
+
+# inventory-server in live-coding mode on :8080 (memory storage).
+[group('dev')]
+dev-server: _sync-libs
+    @echo "-> delegating to Maven: quarkus:dev inventory-server (http://localhost:8080)"
+    mvn -pl inventory-server quarkus:dev
+
+# inventory-web-api in live-coding mode on :8081 (proxies to :8080).
+[group('dev')]
+dev-web-api: _sync-libs
+    @echo "-> delegating to Maven: quarkus:dev inventory-web-api (http://localhost:8081)"
+    mvn -pl inventory-web-api quarkus:dev
+
+# inventory-web-app in live-coding mode on :8082 (the browser entrypoint).
+[group('dev')]
+dev-webapp: _sync-libs
+    @echo "-> delegating to Maven: quarkus:dev inventory-web-app (http://localhost:8082 — log in there)"
+    mvn -pl inventory-web-app quarkus:dev
+
 # --- stack -------------------------------------------------------------------
 
 # Start the stack: postgres -> liquibase migrate (exits 0) -> the three apps.

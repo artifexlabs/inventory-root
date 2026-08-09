@@ -146,6 +146,9 @@ the jar as `/islands/space-annotator.js`; `mvn verify` (and therefore
   pure geometry in `src/annotator-core.ts`, vitest in `test/`).
 - Iterating: `cd inventory-web-app/src/main/web && PATH="$PWD/../../../target/node:$PATH" npm run dev`
   (rebuild-on-change into target/classes; pair with `quarkus dev`).
+- Observing the full flow live: `just dev-server`, `just dev-web-api`, and
+  `just dev-webapp` in three terminals, then http://localhost:8082
+  (admin@example.com / change-me by default).
 - Adding an island: new `.svelte` + entry import, or a second Vite entry; mount it
   from a Qute template with a `<script type="module">` tag.
 
