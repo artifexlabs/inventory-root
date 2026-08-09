@@ -147,6 +147,10 @@ unknown.*
   item/container. Region model and transactional create-from-region land in the API
   tiers first; the first Svelte island (the annotator) arrives with its build
   toolchain; everything else stays server-rendered.
+- **Multi-box annotation flow** *(added 2026-08-09)*: drawing and data entry are
+  separate steps — draw MANY boxes on the photo in one sitting, then set each box's
+  data individually (name, type, and whether it becomes a plain item or a containing
+  item that can hold others). Boxes without data yet persist as unlinked regions.
 - **Location from photo metadata** *(added 2026-08-09)*: if the uploaded picture
   carries GPS EXIF data, extract the lat/long server-side at asset upload and offer it
   as the space's `Location` (match an existing location within tolerance, else
@@ -526,6 +530,13 @@ wholesale (photographing a shelf is the most phone-shaped feature in the plan).*
      draw/select/resize, a small form per box (name, type) posting create-from-region
      through the session. A few hundred lines of TS; no canvas library unless
      pan/zoom/rotate is later demanded (then Konva).
+   - **Draw-then-describe** *(added 2026-08-09)*: the island supports drawing
+     MULTIPLE boxes before any data entry — each drawn box saves immediately as a
+     bare `AssetRegion` (no linked item), and selecting a box opens its form to set
+     the data individually: name, type, and item-vs-**containing item** (container
+     flag → the created item can itself hold others, nested under the space's
+     container). Unfilled boxes persist across sessions as unlinked regions, so a
+     photo can be fully boxed in one pass and described over several.
 5. **Tests**: region CRUD + transactional create-from-region in impl (both backends)
    and server (one audit row, containment correct, region linked); webapp page test
    asserts the island element + its data attributes render for image assets. Island
