@@ -64,6 +64,7 @@ eventually — iOS/Android clients.
 | [inventory-impl/](inventory-impl/) | Default implementations: Postgres repositories, transactional `InventorySystem`, audit sink, Liquibase changelogs. CDI beans, minimal Quarkus coupling. |
 | [inventory-server/](inventory-server/) | Quarkus service host: REST resources exposing `InventorySystem`, OpenAPI (`quarkus-smallrye-openapi`), event-bus consumers, token auth, health probes. |
 | [inventory-web-api/](inventory-web-api/) *(formerly `inventory-webapp`; artifact renamed 2026-08-07)* | Quarkus app: the browser-facing API tier — today a transparent `/api/v1/*` gateway to inventory-server (no HTML, no session state); Phase 6 thickens it into an aggregating BFF (page-shaped payloads, pagination, derived display fields) serving web and future mobile clients. |
+| [inventory-mobile-apps/](inventory-mobile-apps/) *(new 2026-08-09; org `lawfulevilorg`, unlike the `mykelalvis` server-side repos)* | Umbrella submodule holding the per-platform mobile apps as nested submodules: `inventory-ios-app` (Phase 12, SwiftUI universal) and `inventory-android-app` (later phase, stack open). Not Maven; not in the aggregator. Placeholder commits only until their phases execute; all three `lawfulevilorg` remotes are empty until the first authorized push. |
 | [inventory-web-app/](inventory-web-app/) *(new 2026-08-07; directory renamed from `inventory-webapp` 2026-08-09 to match the GitHub repo)* | Quarkus app: the web UI (extracted from `inventory-web-api` in Phase 5) — Qute pages over Pico.css + design tokens, session cookie + OIDC dance, calling web-api only. Gains Svelte islands (Phase 8) for interactive surfaces. |
 
 ## Roadmap
@@ -585,9 +586,11 @@ raster constants' final authority) and step 6 (Zebra, on arrival).*
 *Added 2026-08-09. First mobile client; everything it needs from the backend already
 exists behind `inventory-web-api`.*
 
-1. **Workspace layout**: `inventory-mobile-apps/` (created 2026-08-09, currently
-   empty) hosts per-platform apps; `inventory-ios-app` is the first. At execution it
-   becomes its own git repo + submodule, matching workspace convention. The Xcode
+1. **Workspace layout** *(wired 2026-08-09, ahead of execution)*:
+   `inventory-mobile-apps/` is a superproject submodule
+   (`lawfulevilorg/inventory-mobile-apps`) holding `inventory-ios-app` and
+   `inventory-android-app` as nested submodules (same org) — placeholder commits
+   until their phases execute; remotes are empty until the first authorized push. The Xcode
    project must build headless — `xcodebuild` with a scheme, simulator destination,
    and `CODE_SIGNING_ALLOWED=NO` for CI-shaped builds — never only from the IDE.
    (Whether the project file is hand-managed or generated — e.g. XcodeGen — is decided
