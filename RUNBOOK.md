@@ -23,6 +23,7 @@ output.
 | Backup / restore | `just backup [file]` *(dated filename by default)* · `just restore <file>` *(confirm-gated)* |
 | Migrations | `just migrate` · `just rollback [count]` *(confirm-gated)* |
 | Hardware printer smoke | `just print-label <item-id>` after configuring the printer env |
+| iOS app build/test *(Phase 12)* | `just ios-build` · `just ios-test` · `just ios-open` *(macOS-only)* |
 
 Configuration comes from the environment (or `.env`, which just auto-loads):
 `INVENTORY_SERVER_URL`, `INVENTORY_WEB_API_URL`, `INVENTORY_ADMIN_EMAIL`,
@@ -123,6 +124,25 @@ protocol; TZe tape ≤ 24 mm at 180 dpi). Once the Phase 9 pipeline lands:
 4. Gate: the printed label's QR phone-scans and resolves through `/i/{id}` to the
    item page. If an ~18 mm QR won't scan reliably, iterate module size / quiet zone
    in the composer before anything else.
+
+## iOS app build (Phase 12 — inventory-mobile-apps/inventory-ios-app)
+
+The mobile app is **not a Maven module**: it is a native Swift/SwiftUI universal
+(iPhone + iPad) Xcode project, built by `xcodebuild` through the Justfile — macOS
+only, never part of `mvn verify`, the compose stack, or the Linux CI lanes.
+
+```sh
+just ios-build    # Debug build for the iOS Simulator, unsigned (CODE_SIGNING_ALLOWED=NO)
+just ios-test     # xcodebuild test on a simulator (INVENTORY_IOS_SIMULATOR, default "iPhone 16")
+just ios-open     # open the project in Xcode
+```
+
+Configuration: `INVENTORY_IOS_SCHEME` (default `InventoryApp`),
+`INVENTORY_IOS_SIMULATOR`. The recipes preflight their environment and fail with an
+actionable message when full Xcode is absent (Command Line Tools alone are not
+enough — see [MOBILE-READINESS.md](MOBILE-READINESS.md)) or when the app scaffold
+does not exist yet (Phase 12 not executed). Signed device builds, TestFlight, and
+macOS CI runners are deliberately outside these recipes until distribution starts.
 
 ## Notes
 

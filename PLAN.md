@@ -213,6 +213,19 @@ unknown.*
   deep-link wiring (universal links / app links) is listed but deferred on a public
   HTTPS domain.
 
+### Phase 12 — Create initial mobile app: iOS universal *(eleventh milestone — detail below; added 2026-08-09)*
+- A native **Swift/SwiftUI universal app** (iPhone + iPad, one target) at
+  [inventory-mobile-apps/inventory-ios-app/](inventory-mobile-apps/inventory-ios-app/),
+  consuming only the `inventory-web-api` JSON surface — the same contract as the web
+  UI. This resolves the iOS half of the mobile-stack unknown (Android decides at its
+  own phase and need not match).
+- **Not a Maven app**: built by `xcodebuild` through the [Justfile](Justfile) mobile
+  recipes (`just ios-build` / `ios-test` / `ios-open`) — macOS-only by nature, so the
+  recipes are `[macos]`-gated and never part of `mvn verify`, the compose stack, or
+  the Linux CI lanes (iOS CI needs macOS runners; noted since Phase 10).
+- Prerequisites: the Phase 11 checklist's Xcode + simulator items (Apple Developer
+  Program only when device installs/TestFlight start); a reachable web-api.
+
 ## First milestone (Phase 1, implementable detail)
 
 1. **`inventory-api`** — de-codegen and extend:
@@ -567,6 +580,40 @@ raster constants' final authority) and step 6 (Zebra, on arrival).*
    media sizing enters the composer as a second label geometry (width × height
    instead of fixed-height continuous tape).
 
+## Eleventh milestone (Phase 12: initial iOS universal app)
+
+*Added 2026-08-09. First mobile client; everything it needs from the backend already
+exists behind `inventory-web-api`.*
+
+1. **Workspace layout**: `inventory-mobile-apps/` (created 2026-08-09, currently
+   empty) hosts per-platform apps; `inventory-ios-app` is the first. At execution it
+   becomes its own git repo + submodule, matching workspace convention. The Xcode
+   project must build headless — `xcodebuild` with a scheme, simulator destination,
+   and `CODE_SIGNING_ALLOWED=NO` for CI-shaped builds — never only from the IDE.
+   (Whether the project file is hand-managed or generated — e.g. XcodeGen — is decided
+   at execution and recorded here.)
+2. **App v1 scope** (universal iPhone/iPad, SwiftUI):
+   - Configurable web-api base URL; login via `POST /api/v1/auth/login` (token kept in
+     the Keychain), logout.
+   - Items list from `GET /api/v1/views/items` (search + pagination come free from the
+     Phase 6 BFF); item detail from the one-call `/detail` view.
+   - **QR scan** (VisionKit/DataScanner): scanning a printed label's
+     `<base-url>/i/{id}` deep link opens the item in-app — the mobile half of the
+     label loop.
+   - Photo capture + asset upload rides the existing endpoints; the Phase 8 region
+     model (when built) arrives for free through the same views.
+3. **Build/test tooling**: Justfile recipes `ios-build` (Debug, simulator, unsigned),
+   `ios-test` (`xcodebuild test` on a simulator), `ios-open` — `[macos]`-gated with a
+   preflight that explains what is missing (full Xcode vs CLT, or the scaffold itself
+   before this milestone executes). RUNBOOK documents them.
+4. **Tests**: unit tests for the API client (against canned JSON) and one
+   `xcodebuild test` UI smoke: launch, log in against a stub/local web-api, items list
+   renders. Gate: `just ios-build` and `just ios-test` green on the dev Mac; scanning
+   a physical Brother label opens the right item on a real device.
+5. **Deferred within this phase**: TestFlight/App Store distribution, push, universal
+   links (needs the public HTTPS domain — tracked in Phase 11's checklist), offline
+   mode.
+
 ## Label pipeline and printer testing
 
 *Added 2026-08-06. The label path decomposes into four stages; the first three are fully
@@ -618,9 +665,10 @@ the native/Linux constraint applies only to the shipped binary, never to develop
 ## Open unknowns (tracked, not blocking)
 
 - iOS/Android app stack and timeline (README: "eventually"). Credentials/tooling are
-  now Phase 11 ([MOBILE-READINESS.md](MOBILE-READINESS.md)); only the stack choice
-  remains open. When mobile CI arrives, iOS needs macOS runners — the Phase 10
-  devcontainer covers only the Linux-friendly lanes (JVM, native, Android later).
+  Phase 11 ([MOBILE-READINESS.md](MOBILE-READINESS.md)); the iOS half is now decided —
+  native SwiftUI universal app, Phase 12 — while the Android stack stays open (decided
+  at its own phase, need not match iOS). When mobile CI arrives, iOS needs macOS
+  runners — the Phase 10 devcontainer covers only the Linux-friendly lanes.
 - ~~Label-printer protocols/vendors to support~~ — resolved 2026-08-08: Brother
   PT-P750W first (raster protocol over TCP 9100); ZPL remains the reference dialect for
   a future Zebra-class device. Open sub-question: whether ~18 mm QRs on 24 mm tape scan

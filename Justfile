@@ -22,6 +22,10 @@ pg_password := env('POSTGRES_PASSWORD', 'inventory')
 
 native_flags := "-DskipTests -Dnative -Dquarkus.native.container-build=true"
 
+ios_app_dir := "inventory-mobile-apps/inventory-ios-app"
+ios_scheme := env('INVENTORY_IOS_SCHEME', 'InventoryApp')
+ios_simulator := env('INVENTORY_IOS_SIMULATOR', 'iPhone 16')
+
 # List every task.
 default:
     @just --list --unsorted
@@ -164,6 +168,41 @@ _wait-ready:
       echo -n "."; sleep 1
     done
     echo " FAIL: server not ready after 60s"; exit 1
+
+# --- mobile (Phase 12: iOS universal app; macOS-only, not Maven) --------------
+
+# Debug build of the iOS app for the simulator (unsigned; delegates to xcodebuild).
+[group('mobile')]
+[macos]
+ios-build: _ios-preflight
+    @echo "-> delegating to xcodebuild: Debug simulator build of {{ ios_scheme }} (CODE_SIGNING_ALLOWED=NO)"
+    cd {{ ios_app_dir }} && xcodebuild -scheme {{ ios_scheme }} \
+      -destination 'generic/platform=iOS Simulator' -configuration Debug \
+      CODE_SIGNING_ALLOWED=NO build
+
+# Run the iOS app's tests on a simulator (delegates to xcodebuild test).
+[group('mobile')]
+[macos]
+ios-test: _ios-preflight
+    @echo "-> delegating to xcodebuild: tests of {{ ios_scheme }} on '{{ ios_simulator }}'"
+    cd {{ ios_app_dir }} && xcodebuild -scheme {{ ios_scheme }} \
+      -destination 'platform=iOS Simulator,name={{ ios_simulator }}' \
+      CODE_SIGNING_ALLOWED=NO test
+
+# Open the iOS app in Xcode.
+[group('mobile')]
+[macos]
+ios-open: _ios-preflight
+    open {{ ios_app_dir }}/*.xcodeproj 2>/dev/null || open {{ ios_app_dir }}/*.xcworkspace
+
+[macos]
+_ios-preflight:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    xcodebuild -version > /dev/null 2>&1 \
+      || { echo "FAIL: full Xcode required (only Command Line Tools found) — see MOBILE-READINESS.md"; exit 1; }
+    ls {{ ios_app_dir }}/*.xcodeproj {{ ios_app_dir }}/*.xcworkspace > /dev/null 2>&1 \
+      || { echo "FAIL: no Xcode project in {{ ios_app_dir }} — Phase 12 (initial iOS app) not yet executed"; exit 1; }
 
 # --- backup / restore / migrations (day-2) -----------------------------------
 
