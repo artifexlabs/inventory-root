@@ -156,6 +156,10 @@ unknown.*
   as the space's `Location` (match an existing location within tolerance, else
   prefill a create form) — suggested, never silently applied. Best-effort by nature:
   many phones and share paths strip EXIF.
+- **Device GPS from the mobile apps** *(added 2026-08-09)*: the mobile clients
+  (Phase 12+) don't depend on EXIF surviving — the app reads the phone's GPS at
+  capture time and sends lat/long explicitly with the asset upload, feeding the SAME
+  location-suggestion pipeline. Explicit coordinates win over EXIF when both exist.
 
 ### Phase 9 — Label hardware: Brother PT-P750W *(tenth milestone — detail below)*
 - Independent of Phase 8 and may run before or alongside it — the P750W is physically
@@ -519,6 +523,12 @@ wholesale (photographing a shelf is the most phone-shaped feature in the plan).*
      tolerance or prefill location-create. Suggested, never silently applied;
      best-effort (EXIF is often stripped). No new tables — locations remain the
      existing first-class model.
+   - **Explicit coordinates on upload** *(added 2026-08-09)*: the asset-upload
+     operation accepts optional lat/long parameters so clients that KNOW the
+     location — the mobile apps reading the phone's GPS at capture time — can pass
+     it directly instead of hoping EXIF survives. Explicit coordinates take
+     precedence over EXIF; both routes converge on the same `AssetInfo` fields and
+     suggestion logic downstream.
 3. **`inventory-server`** — `GET/POST /api/v1/assets/{id}/regions`,
    `DELETE /api/v1/regions/{id}`, `POST /api/v1/assets/{id}/regions/make-item`;
    rides through the web-api proxy untouched.
@@ -618,7 +628,10 @@ exists behind `inventory-web-api`.*
      `<base-url>/i/{id}` deep link opens the item in-app — the mobile half of the
      label loop.
    - Photo capture + asset upload rides the existing endpoints; the Phase 8 region
-     model (when built) arrives for free through the same views.
+     model (when built) arrives for free through the same views. *(Added 2026-08-09)*
+     At capture the app reads the device GPS (CoreLocation, when-in-use permission)
+     and sends lat/long explicitly with the upload — the reliable source for Phase
+     8's location suggestion, since EXIF rarely survives the upload path.
 3. **Build/test tooling**: Justfile recipes `ios-build` (Debug, simulator, unsigned),
    `ios-test` (`xcodebuild test` on a simulator), `ios-open` — `[macos]`-gated with a
    preflight that explains what is missing (full Xcode vs CLT, or the scaffold itself
