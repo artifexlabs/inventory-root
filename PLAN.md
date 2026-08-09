@@ -146,6 +146,11 @@ unknown.*
   item/container. Region model and transactional create-from-region land in the API
   tiers first; the first Svelte island (the annotator) arrives with its build
   toolchain; everything else stays server-rendered.
+- **Location from photo metadata** *(added 2026-08-09)*: if the uploaded picture
+  carries GPS EXIF data, extract the lat/long server-side at asset upload and offer it
+  as the space's `Location` (match an existing location within tolerance, else
+  prefill a create form) — suggested, never silently applied. Best-effort by nature:
+  many phones and share paths strip EXIF.
 
 ### Phase 9 — Label hardware: Brother PT-P750W *(tenth milestone — detail below)*
 - Independent of Phase 8 and may run before or alongside it — the P750W is physically
@@ -488,6 +493,14 @@ wholesale (photographing a shelf is the most phone-shaped feature in the plan).*
 2. **`inventory-impl`** — changeset 010 (`asset_regions` table + rollback); InMemory +
    Pg implementations; audit actions `region.create`, `region.delete`,
    `item.create-from-region`.
+   - **EXIF location extraction** *(added 2026-08-09)*: at asset upload, parse image
+     metadata for GPS coordinates (library choice at implementation — e.g.
+     `com.drewnoakes:metadata-extractor`; verify native-image friendliness, else a
+     minimal EXIF GPS-tag parser). If present, surface lat/long on the `AssetInfo`
+     so the tiers above can suggest a `Location`: match an existing one within
+     tolerance or prefill location-create. Suggested, never silently applied;
+     best-effort (EXIF is often stripped). No new tables — locations remain the
+     existing first-class model.
 3. **`inventory-server`** — `GET/POST /api/v1/assets/{id}/regions`,
    `DELETE /api/v1/regions/{id}`, `POST /api/v1/assets/{id}/regions/make-item`;
    rides through the web-api proxy untouched.
