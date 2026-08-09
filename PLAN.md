@@ -678,7 +678,9 @@ the native/Linux constraint applies only to the shipped binary, never to develop
 - ~~Long-term web UI framework/language~~ — decided 2026-08-07 (Web UI direction row):
   island architecture, Svelte islands, SvelteKit only at a majority-interactive tipping
   point. Remaining sub-unknown: none until an island exists; revisit after Phase 8.
-- Repo naming caution *(mostly resolved 2026-08-09: the directory was renamed to
-  `inventory-web-app`, matching its GitHub repo)*: the unhyphenated `inventory-webapp`
-  GitHub URL is still a redirect to `inventory-web-api` — never push to it. The Maven
-  artifactId remains `inventory-webapp` (rename it deliberately if ever desired).
+- Repo naming caution *(resolved 2026-08-09: directory, submodule, AND Maven
+  artifactId all renamed to `inventory-web-app`, matching the GitHub repo)*: the
+  unhyphenated `inventory-webapp` GitHub URL is still a redirect to
+  `inventory-web-api` — never push to it. The Java package
+  (`org.lawfulevil.inventory.webapp`) and the `inventory.webapp.*` config keys keep
+  the old spelling deliberately — renaming those is behavioral, not cosmetic.
