@@ -92,5 +92,17 @@ services:
     ports:
       - "8082:8082"
 
+  # Phase 9 step 4: a TCP 9100 sink standing in for the label printer, so the
+  # END-TO-END print path (native server included) verifies without hardware.
+  # Off by default; `--profile fake-printer` starts it, and pointing the server
+  # at it (INVENTORY_PRINTER_HOST=fake-printer) captures each job under /jobs.
+  fake-printer:
+    image: alpine:3.20
+    profiles: ["fake-printer"]
+    command: sh -c 'i=0; while true; do i=$$((i+1)); nc -l -p 9100 > /jobs/job-$$i.bin; done'
+    volumes:
+      - fake-printer-jobs:/jobs
+
 volumes:
   pgdata:
+  fake-printer-jobs:

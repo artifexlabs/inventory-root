@@ -20,7 +20,9 @@ admin_email := env('INVENTORY_ADMIN_EMAIL', 'admin@example.com')
 admin_password := env('INVENTORY_ADMIN_PASSWORD', 'change-me')
 pg_password := env('POSTGRES_PASSWORD', 'inventory')
 
-native_flags := "-DskipTests -Dnative -Dquarkus.native.container-build=true"
+# maven.test.skip (not skipTests): ibparent-root hard-pins <skipTests>false</skipTests>
+# in its surefire config, so -DskipTests is silently ignored.
+native_flags := "-Dmaven.test.skip=true -Dnative -Dquarkus.native.container-build=true"
 
 ios_app_dir := "inventory-mobile-apps/inventory-ios-app"
 android_app_dir := "inventory-mobile-apps/inventory-android-app"
@@ -146,6 +148,41 @@ smoke:
       || { echo "FAIL: BFF view missing smoke-item"; exit 1; }
     echo "ok: BFF view answers through web-api"
     echo "SMOKE PASS"
+
+# End-to-end label smoke WITHOUT hardware: native stack + fake-printer TCP sink,
+# asserting real Brother raster bytes (invalidate + ESC@ ... 0x1A) arrive.
+[group('smoke')]
+smoke-fake-printer:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    echo "-> stack up with the fake printer (server pointed at it, not the real P750W)"
+    INVENTORY_PRINTER=brother-p750w INVENTORY_PRINTER_HOST=fake-printer \
+      docker compose --profile fake-printer up -d
+    just _wait-ready
+    TOKEN=$(curl -s -X POST {{ server_url }}/api/v1/auth/login \
+      -H 'Content-Type: application/json' \
+      -d '{"email":"{{ admin_email }}","password":"{{ admin_password }}"}' \
+      | sed -E 's/.*"token":"([^"]+)".*/\1/')
+    ID=$(curl -s -X POST -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+      -d '{"name":"fake-printer-smoke","type":"tool"}' {{ server_url }}/api/v1/items \
+      | sed -E 's/.*"id":"([^"]+)".*/\1/')
+    CODE=$(curl -s -o /dev/null -w '%{http_code}' -X POST -H "Authorization: Bearer $TOKEN" \
+      {{ server_url }}/api/v1/items/$ID/print-label)
+    [ "$CODE" = "204" ] || { echo "FAIL: print-label returned $CODE"; exit 1; }
+    echo "ok: print-label 204 against the fake printer"
+    sleep 2
+    JOB=$(docker compose --profile fake-printer exec -T fake-printer sh -c 'ls -t /jobs 2>/dev/null | head -1')
+    [ -n "$JOB" ] || { echo "FAIL: no job captured by the fake printer"; exit 1; }
+    docker compose --profile fake-printer cp fake-printer:/jobs/$JOB /tmp/inventory-fake-printer-job.bin
+    python3 - <<'PY'
+    data = open('/tmp/inventory-fake-printer-job.bin', 'rb').read()
+    assert len(data) > 102, f"job too short: {len(data)} bytes"
+    assert data[:100] == bytes(100), "missing 100-byte invalidate preamble"
+    assert data[100:102] == b'\x1b\x40', "missing ESC @ initialize"
+    assert data[-1] == 0x1A, "missing print command terminator"
+    print(f"ok: raster job verified ({len(data)} bytes, preamble + ESC@ ... 0x1A)")
+    PY
+    echo "FAKE-PRINTER SMOKE PASS (end-to-end raster bytes, no hardware)"
 
 # POST print-label for an existing item id (hardware gate: scan the physical label).
 [group('smoke')]

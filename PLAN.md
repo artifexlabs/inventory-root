@@ -620,8 +620,21 @@ passes `INVENTORY_PRINTER*` env through to the server (defaults keep `log`).*
 ***Phone-scan gate PASSED (2026-08-09)***: *both printed labels scanned reliably on
 an iPhone 15 Pro and were visually identical — the ~18 mm QR from 24 mm tape needs
 no composer iteration. The Brother P750W path is DONE end to end: compose → encode →
-TCP 9100 → hardware → phone scan. Remaining in this milestone: step 6 only (Zebra
-GK420t, arriving ~2026-08-13).*
+TCP 9100 → hardware → phone scan.*
+
+***Steps 3–4 COMPLETED (2026-08-09, same day, later)***: *the native
+`inventory-server` image was rebuilt with the label pipeline (finding: ibparent-root
+hard-pins `<skipTests>false</skipTests>` in surefire, so `-DskipTests` is silently
+ignored — the Justfile's native flags now use `-Dmaven.test.skip=true`). Compose
+gained the `fake-printer` service (alpine nc TCP-9100 sink, profile-gated behind
+`--profile fake-printer`, jobs captured to a volume), and `just smoke-fake-printer`
+runs the whole thing: native stack up pointed at the sink → print-label → 204 →
+captured job verified byte-for-byte (100-byte invalidate + ESC@ … 0x1A; 9384 bytes
+observed). The full Phase 7 curl smoke also passes on the new image, and a bonus
+check exercised Phase 8 against native+pg: asset upload with explicit `?lat&long`
+(coordinates stored), bare region, make-item promotion, link readback — all green.
+Steps 1–5 are now COMPLETE; remaining in this milestone: step 6 only (Zebra GK420t,
+arriving ~2026-08-13).*
 
 1. **`inventory-impl`** — the pipeline stages as plain classes (CDI-light, like the
    other impl code):

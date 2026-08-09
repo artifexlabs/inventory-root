@@ -23,6 +23,7 @@ output.
 | Backup / restore | `just backup [file]` *(dated filename by default)* · `just restore <file>` *(confirm-gated)* |
 | Migrations | `just migrate` · `just rollback [count]` *(confirm-gated)* |
 | Hardware printer smoke | `just print-label <item-id>` after configuring the printer env |
+| Hardware-FREE printer smoke (end-to-end raster bytes) | `just smoke-fake-printer` |
 | Mobile app builds | `just mobile-build` *(= ios-build + android-build)* · `just ios-build` · `just ios-test` · `just ios-regen` · `just android-build` *(no-op until scaffolded)* |
 
 Configuration comes from the environment (or `.env`, which just auto-loads):
@@ -127,11 +128,14 @@ to the server (defaults keep the `log` printer).
    both live in the workspace `.env`.
 3. Run the smoke flow's `print-label` step against a real item.
 4. Gate (PASSED 2026-08-09): both smoke labels scanned reliably on an iPhone 15 Pro —
-   the ~18 mm QR from 24 mm tape needs no module-size/quiet-zone iteration. (A label
-   printed from a dev-mode server encodes the dev `qr-base-url`; full `/i/{id}`
-   resolution needs the stack up and the phone on the LAN — re-run this smoke once
-   against the compose stack after rebuilding the native server image, which
-   currently predates the label pipeline: `just native inventory-server && just images`.)
+   the ~18 mm QR from 24 mm tape needs no module-size/quiet-zone iteration.
+
+No hardware handy? `just smoke-fake-printer` proves the identical path end to end:
+it brings the stack up with the `fake-printer` compose service (an alpine `nc`
+TCP-9100 sink, profile-gated) as the printer target, POSTs print-label through the
+NATIVE server, and verifies the captured job's raster bytes (100-byte invalidate +
+ESC@ … 0x1A). Verified green 2026-08-09 on the rebuilt native image; a plain
+`just up` never starts the sink and honors `.env`'s real `INVENTORY_PRINTER_HOST`.
 
 ## Web islands (Phase 8 — inventory-web-app/src/main/web)
 
