@@ -18,4 +18,4 @@
 	url = git@github.com:mykelalvis/inventory-web-app.git
 [submodule "inventory-mobile-apps"]
 	path = inventory-mobile-apps
-	url = git@github.com:lawfulevilorg/inventory-mobile-apps.git
+	url = git@github.com:mykelalvis/inventory-mobile-apps.git
