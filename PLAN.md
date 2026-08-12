@@ -670,10 +670,14 @@ arriving ~2026-08-13).*
 6. **Zebra GK420t extension** (on arrival, ~2026-08-13): `ZplEncoder` (stage 2, the
    reference dialect — `^GFA` graphic field from the same 1-bit bitmap, eyeballable
    via Labelary during development) and `inventory.printer=zebra-gk420t` wiring.
-   Confirm the connectivity variant first: Ethernet reuses `Tcp9100Transport`
-   unchanged; USB-only requires a transport decision (record it when taken). Die-cut
-   media sizing enters the composer as a second label geometry (width × height
-   instead of fixed-height continuous tape).
+   Connectivity DECIDED 2026-08-12: **Ethernet initially** — reuses
+   `Tcp9100Transport` unchanged (`inventory.printer.host`/`.port`, exactly like the
+   Brother). A later switch to **USB as a captured "local" connection** (printer
+   tethered to the serving host, off the LAN) stays open; when taken, it needs a
+   transport decision — likely a `UsbTransport`/spool alternative behind the same
+   stage-3 interface, with host-OS specifics (CUPS raw queue vs direct usb device)
+   recorded then. Die-cut media sizing enters the composer as a second label
+   geometry (width × height instead of fixed-height continuous tape).
    - **Two named label formats** *(added 2026-08-12; media in hand/ordered)*:
      - `standard` — 2.25×1.25 in (457×254 dots @203 dpi): the Brother layout
        adapted — full-height QR (~1.1 in) left, name + id right. The default.
