@@ -674,6 +674,19 @@ arriving ~2026-08-13).*
    unchanged; USB-only requires a transport decision (record it when taken). Die-cut
    media sizing enters the composer as a second label geometry (width × height
    instead of fixed-height continuous tape).
+   - **Two named label formats** *(added 2026-08-12; media in hand/ordered)*:
+     - `standard` — 2.25×1.25 in (457×254 dots @203 dpi): the Brother layout
+       adapted — full-height QR (~1.1 in) left, name + id right. The default.
+     - `large` — 2.25×4 in (457×812 dots): MORE information and a BIGGER code —
+       a ~2 in QR centered up top (scans from across a room), then name (large),
+       id (mono), and additional fields as space allows: type, location name,
+       description (wrapped/truncated), and a printed-on date. Exact field set
+       finalized at implementation against real items.
+     - Selection: `inventory.printer.format` config sets the default;
+       `POST .../print-label?format=large` overrides per print. The composer owns
+       formats (pure Java2D layout fns); encoders stay format-agnostic (they just
+       rasterize whatever bitmap arrives) — so `large` works on any future
+       printer whose media fits it, and golden-file tests pin BOTH layouts.
 
 ## Eleventh milestone (Phase 12: initial iOS universal app)
 
