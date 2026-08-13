@@ -192,21 +192,56 @@ unknown.*
   GitHub is the remaining gate and happens at the next authorized push. Mobile CI
   (macOS runners for iOS) is explicitly out of scope here — noted for the mobile
   milestone.
-- **CI dependency (2026-08-08)**: the build parents off `ibparent-112-SNAPSHOT` (and
-  sibling ib* 112-SNAPSHOTs), currently locally installed only. The user will release
-  ibparent outside this project so it resolves remotely; until that release lands
-  (and inventory-parent points at it), ci.yml cannot resolve dependencies on GitHub.
-  The devcontainer is unaffected — it bind-mounts the host's `~/.m2/repository`.
-- **Known CI blocker (discovered 2026-08-08)**: the build parents off
-  `ibparent-112-SNAPSHOT` and friends (`ibparent-root`, `ibconstants`,
-  `ibexceptions`, `maven-import-bom` — all 112-SNAPSHOT), which are **locally
-  installed artifacts that exist only in the dev Mac's `~/.m2`** — no remote serves
-  them. The devcontainer works because it bind-mounts the host repository cache; CI
-  on GitHub cannot and will fail dependency resolution until one of: (a) the ib*
-  artifacts are published somewhere CI-reachable (e.g. GitHub Packages), (b) the
-  parent moves to a released ibparent from Maven Central (90 is the latest release
-  seen locally), or (c) CI builds the ib* sources first. Decision pending — pick one
-  before expecting ci.yml green.
+- **CI dependency — RESOLVED 2026-08-13**: `ibparent` 112 was released to Maven
+  Central; `inventory-parent` now parents off the released `112` (was
+  `112-SNAPSHOT`), so CI resolves the whole parent chain remotely. The full local
+  `mvn verify` and CI both pass against it.
+- **CI blocker #2 — private-submodule checkout, RESOLVED 2026-08-13**: with the
+  parent resolvable, CI surfaced the next failure: all `inventory-*` repos are
+  private, and the workflow's `GITHUB_TOKEN` only reaches `inventory-root`, so
+  every submodule clone got "repository not found". Fix: `ci.yml` passes
+  `token: ${{ secrets.SUBMODULE_TOKEN || github.token }}` to `actions/checkout`;
+  `SUBMODULE_TOKEN` is a fine-grained PAT (contents:read on the `inventory-*`
+  repos) stored as a repo secret on `inventory-root`.
+- **Phase 10 gate PASSED 2026-08-13**: first fully green `ci.yml` run
+  (31711062159, 5m06s) — GHCR devcontainer image pull, private-submodule checkout,
+  and the full six-module `mvn verify` with Testcontainers all work on GitHub.
+  Publishing remains out of scope: CI stops at `verify`; no Maven artifacts are
+  deployed anywhere.
+
+### Task — Dependabot remediation: web-app npm island toolchain *(added 2026-08-13; deferred, not started)*
+
+GitHub reports **21 open Dependabot alerts on `inventory-web-app` (2 critical, 1
+high, 16 moderate, 2 low)** — all in the npm island toolchain under
+[inventory-web-app/src/main/web/package.json](inventory-web-app/src/main/web/package.json)
+(pinned: `svelte 4.2.19`, `vite 5.4.11`, `vitest 1.6.0`, `@sveltejs/vite-plugin-svelte
+3.1.2`; `esbuild` is transitive via vite). Everything here is build/dev tooling except
+`svelte`, whose compiler output ships in the islands. Full list:
+`gh api repos/mykelalvis/inventory-web-app/dependabot/alerts`.
+
+- **Criticals (vitest)**: GHSA-9crc-q9x8-hgqq (RCE while the vitest API server
+  listens; fixed 1.6.1) and GHSA-5xrq-8626-4rwp (arbitrary file read/execute via
+  Vitest UI server; fixed 3.2.6). Clearing both means **vitest ≥ 3.2.6** — a
+  two-major jump from 1.6.0.
+- **High (vite)**: GHSA-fx2h-pf6j-xcff (`server.fs.deny` bypass; affects ≤ 6.4.2,
+  fixed only in 6.4.3) — so clearing the high requires **vite ≥ 6.4.3**, not just
+  the 5.4.21 tail of the twelve 5.x mediums/lows.
+- **Moderates (svelte ×6)**: SSR XSS family; fixes land in 5.51.5–5.55.7 → requires
+  **svelte ≥ 5.55.7**, i.e. the Svelte 4 → 5 major migration.
+- **Moderate (esbuild)**: GHSA-67mh-4wv8-2f99 (dev server responds to any website;
+  fixed 0.25.0) — resolves transitively once vite ≥ 6.
+
+**Task (one coherent toolchain upgrade, not per-alert patches):** bump to
+`svelte ≥ 5.55.7`, `vite ≥ 6.4.3`, `vitest ≥ 3.2.6`, and the matching
+`@sveltejs/vite-plugin-svelte` major (Svelte-5/Vite-6 compatible line). Svelte 4→5
+is the real work: verify the islands still compile as custom elements
+(`customElement` compiler path), the annotator island behaves identically, and the
+8 vitest tests pass. Gate: `mvn -B -ntp verify` green locally and in CI, plus a
+manual smoke of the space-annotator page; then confirm the Dependabot alert count
+drops to zero. Risk containment: severities are dev-server/test-runner attack
+surface except the svelte SSR XSS items, and the islands are client-compiled (no
+Svelte SSR in this app) — which is why this is scheduled as a deliberate task
+rather than an emergency patch.
 
 ### Phase 11 — Mobile developer readiness *(was Phase 10; renumbered 2026-08-08; checklist in [MOBILE-READINESS.md](MOBILE-READINESS.md); no ordinal milestone)*
 - Every credential and tool needed to start iOS/Android development, gathered BEFORE
