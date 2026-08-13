@@ -209,7 +209,15 @@ unknown.*
   Publishing remains out of scope: CI stops at `verify`; no Maven artifacts are
   deployed anywhere.
 
-### Task — Dependabot remediation: web-app npm island toolchain *(added 2026-08-13; deferred, not started)*
+### Task — Dependabot remediation: web-app npm island toolchain *(added 2026-08-13; EXECUTED 2026-08-13)*
+
+**Outcome**: upgraded in one move to `svelte 5.56.9` / `vite 6.4.3` / `vitest 3.2.7` /
+`@sveltejs/vite-plugin-svelte 5.1.1` (vite pinned to 6.x because frontend-maven-plugin
+installs Node v20.18.1; vite 7 needs ≥ 20.19). The annotator island compiled unchanged
+(Svelte 5 legacy syntax + `customElement` path), `npm audit` reports 0 vulnerabilities,
+local and CI `mvn verify` green (run 31715299939), and **open Dependabot alerts dropped
+21 → 0**. Remaining nicety, not a gate failure: an in-browser smoke of the annotator
+island under Svelte 5 (the Quarkus page tests cover serving, not pointer interaction).
 
 GitHub reports **21 open Dependabot alerts on `inventory-web-app` (2 critical, 1
 high, 16 moderate, 2 low)** — all in the npm island toolchain under
