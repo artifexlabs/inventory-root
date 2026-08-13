@@ -757,6 +757,16 @@ arriving ~2026-08-13).*
 *Added 2026-08-09. First mobile client; everything it needs from the backend already
 exists behind `inventory-web-api`.*
 
+*App v1 BUILT 2026-08-13 (`just ios-build` green, Xcode 26.3): Settings holds the
+web-api base URL and email/password login (token in Keychain); the app opens on the
+items list; item CRUD (create with container toggle, edit via full-JSON PUT
+round-trip, swipe delete) plus print-label; in-app camera capture (photo library on
+the simulator) uploads assets and opens a native annotator — drag normalized boxes
+on the photo, describe each box, and the one-shot `regions/make-item` call mints it
+as an item (container by default) contained by the photographed item. Not yet:
+QR scanning, Sign in with Apple (Phase 13 wired server-side; the native button
+arrives with the Apple Developer account), TestFlight/device signing.*
+
 1. **Workspace layout** *(wired 2026-08-09, ahead of execution)*:
    `inventory-mobile-apps/` is a superproject submodule holding `inventory-ios-app`
    and `inventory-android-app` as nested submodules — placeholder commits
