@@ -33,8 +33,12 @@ jobs:
       # (which injects the token) sees HTTPS URLs.
       - name: Rewrite SSH GitHub URLs to HTTPS
         run: git config --global url."https://github.com/".insteadOf "git@github.com:"
+      # GITHUB_TOKEN is scoped to this repo only; the submodules are private
+      # sibling repos, so cloning them needs SUBMODULE_TOKEN — a fine-grained
+      # PAT with contents:read on the inventory-* repos.
       - uses: actions/checkout@v4
         with:
           submodules: recursive
+          token: ${{ secrets.SUBMODULE_TOKEN || github.token }}
       - name: Build and test all modules
         run: mvn -B -ntp verify
