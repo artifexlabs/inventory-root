@@ -24,6 +24,7 @@ eventually — iOS/Android clients.
 | Web tier split | **`inventory-web-api` (API) + new `inventory-webapp` (UI)** *(added 2026-08-07)* | The original `inventory-webapp` module was renamed to `inventory-web-api` (GitHub repo, directory, and Maven artifact). A new `inventory-webapp` module (fresh repo, Quarkus/Maven skeleton building and testing like its siblings) receives the actual web UI in Phase 5, leaving `inventory-web-api` as the pure browser-facing API tier (sessions, login/OIDC exchange, JSON the UI consumes). Rationale: with the UI isolated behind a JSON contract, it can be restyled or wholesale replaced later — different framework, even a different language — without touching any API tier. |
 | Web UI direction | **Island architecture: Qute shell + Svelte islands; thick web-api, thin frontend** *(decided 2026-08-07)* | Planned interactions (photo annotation — draw boxes on a space picture and turn them into items/containers — and more to come) are real client-side interactivity, but the app's majority remains server-rendered CRUD. So: keep the Qute/Pico shell; mount self-contained **Svelte** components compiled as custom elements exactly where interactivity is needed (`quarkus-web-bundler` keeps the npm build inside Maven, TypeScript for island code). If the app ever tips majority-interactive, islands migrate into **SvelteKit** — a gradient, not a rewrite cliff. (React islands were the considered alternative; rejected for now: heavier baseline, ecosystem weight not yet needed.) Complementary principle: **web-api thickens, frontend thins** — aggregation, pagination, derived display fields live in web-api (serving web and future mobile once); business rules stay in inventory-server; the webapp renders and holds the session. Boundary test: an `if` that changes what is *allowed* belongs in inventory-server; one that changes what is *shown* may live in web-api; the webapp only renders. |
 | Label printer hardware | **Brother PT-P750W first** *(decided 2026-08-08; printer in hand)* | Wi-Fi with a built-in print server accepting **raw TCP 9100** — exactly the transport stage 3 was designed around — and it speaks Brother's **documented** raster protocol (official Raster Command Reference; `ptouch-print` as OSS prior art), so the encode stage implements a spec instead of reverse-engineering. Constraints accepted: TZe tape ≤ 24 mm at 180 dpi (~128-dot head) → continuous strips, QR ≤ ~18 mm with text lengthwise; first physical gate is phone-scannability of an 18 mm QR. The DYMO MobileLabeler (1982171) was evaluated and rejected for system integration: Bluetooth-only, proprietary/undocumented app-oriented protocol, and Bluetooth-into-container plumbing — it stays a manual label maker. **Second target (ordered 2026-08-09, arriving ~2026-08-13): Zebra GK420t** — thermal transfer (temperature-stable labels; polypropylene + wax/resin ribbon is the recommended media), 203 dpi, 4-inch die-cut stock, ZPL — which turns the recorded ZPL reference encoder into real hardware. On arrival, verify which connectivity variant it is: Ethernet gives the standard TCP-9100 transport; a USB-only unit needs a transport decision before integration. Everything stays behind `LabelPrinter`, so none of this forecloses other vendors. |
+| Federated identity | **`user_identities(provider, subject)` join table; email demoted to profile data** *(decided 2026-08-13, with Sign in with Apple)* | Today every lookup is email-keyed and `InventoryUser` even documents email as "the Google OIDC subject email". Apple breaks that: "Hide My Email" hands out per-app `@privaterelay.appleid.com` addresses, so email is neither stable nor matchable across providers. The stable key each provider guarantees is the OIDC `sub` claim, scoped to the issuer — hence a `(provider, subject) → user_id` join table, identity-first resolution at the exchange (subject match → email match linking a new provider to an existing account → invited/auto provisioning policy), and Google logins start recording their `sub` too. `TokenService`, sessions, and admin stay provider-agnostic — nothing downstream of the exchange changes. |
 | Label/QR rendering in native | **`quarkus-awt`** *(revised 2026-08-06; supersedes the pure-PNG-encoder decision of 2026-08-05)* | Labels will compose text and possibly other images alongside the QR — that is real Java2D (`Graphics2D`, fonts), which a bare PNG encoder cannot do. quarkus-awt makes AWT work in native images with Quarkus maintaining the metadata. Costs accepted: native images are Linux-only (the deploy target is Linux containers anyway) and the container image must carry fonts + fontconfig. macOS development is unaffected — headless AWT works fully on the JVM, so all dev and tests run on the Mac; native verification happens by container-building and container-running. If labels ever turn out to be QR-only after all, the pure-JDK 1-bit PNG encoder over zxing's `BitMatrix` remains the recorded simplification option. |
 
 ## Architecture
@@ -277,6 +278,22 @@ rather than an emergency patch.
   the Linux CI lanes (iOS CI needs macOS runners; noted since Phase 10).
 - Prerequisites: the Phase 11 checklist's Xcode + simulator items (Apple Developer
   Program only when device installs/TestFlight start); a reachable web-api.
+
+### Phase 13 — Federated identity: Sign in with Apple *(twelfth milestone — detail below; added 2026-08-13)*
+- **Sign in with Apple everywhere Google OIDC works today**: a second button on the
+  webapp login page, a second named OIDC tenant (`quarkus.oidc.apple.*`, Quarkus's
+  built-in `provider=apple` preset), and a provider-aware exchange so the server
+  keys identity on `(provider, subject)` instead of email (see the federated-identity
+  decision row).
+- Apple is also a **future iOS requirement**: App Store review requires Sign in with
+  Apple in any app offering other third-party logins, so Phase 12's login screen
+  inherits this work (native `ASAuthorizationController` → id-token exchange at
+  web-api — wired at Phase 12, not here).
+- Built disabled-by-default like Google (`OidcDisabledTest` pattern): all wiring and
+  tests run without Apple credentials; flipping it on needs an Apple Developer
+  Program account (Services ID = OIDC client-id, ES256 signing key, team ID) and an
+  HTTPS redirect URL (Apple refuses plain-http callbacks — real logins need a
+  TLS-fronted deployment or a tunnel even in dev).
 
 ## First milestone (Phase 1, implementable detail)
 
@@ -779,6 +796,41 @@ exists behind `inventory-web-api`.*
 5. **Deferred within this phase**: TestFlight/App Store distribution, push, universal
    links (needs the public HTTPS domain — tracked in Phase 11's checklist), offline
    mode.
+
+## Twelfth milestone (Phase 13: Sign in with Apple + federated identity)
+
+*Added 2026-08-13. Everything lands disabled-by-default and CI-testable without Apple
+credentials; the flip-on is config + secrets only.*
+
+1. **Schema (inventory-impl)** — changeset `012-user-identities.yaml`:
+   `user_identities(provider text, subject text, user_id fk→users(id) cascade,
+   PRIMARY KEY (provider, subject))` + index on `user_id`. `users` unchanged
+   (`uq_users_email` stays; email remains profile data + legacy key).
+2. **Store (inventory-impl)** — `UserStore` gains `findByIdentity(provider, subject)`,
+   `linkIdentity(userId, provider, subject)`, and an indexed `findByEmail` (replacing
+   the exchange's O(n) `list()` scan); implemented in both `PgUserStore` and
+   `InMemoryUserStore`.
+3. **Exchange (inventory-server)** — `POST /api/v1/auth/exchange` body gains optional
+   `provider` + `subject`. Resolution order: `(provider, subject)` identity → email
+   match (case-insensitive; links the new identity to the existing user) → provisioning
+   policy (`invited` 403 / `auto` create + link). Legacy `{email, displayName}`-only
+   bodies keep today's email-keyed behavior. Audit events carry the provider.
+4. **Webapp (inventory-web-app)** — named tenant `quarkus.oidc.apple.*` with
+   `provider=apple` under the `%oidc` profile, enabled by
+   `INVENTORY_OIDC_APPLE_ENABLED` (default false; secrets via
+   `QUARKUS_OIDC_APPLE_CLIENT_ID`, key file/kid/team-id env). New
+   `GET /oidc/apple/login` (`@Tenant("apple")`); both login resources now pass
+   `provider` + `sub` to the exchange. Apple quirk accepted: the display name arrives
+   only in the first callback's `user` form field, which Quarkus does not surface —
+   fall back to the email local part. Login page renders one button per enabled
+   provider (`oidcEnabled` → per-provider flags).
+5. **Tests** — mirror the established disabled-pattern: webapp `AppleOidcDisabledTest`
+   (bounce + no button); server exchange tests for subject-match, email-link, relay-email
+   provisioning, legacy body; store tests for the new methods in memory + Pg
+   (Testcontainers).
+6. **Gate** — `mvn verify` green locally and in CI with zero Apple config present;
+   manual end-to-end Apple login deferred until the Apple Developer account exists
+   (Phase 11 checklist) and a TLS-fronted redirect URL is available.
 
 ## Label pipeline and printer testing
 
