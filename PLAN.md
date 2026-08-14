@@ -25,6 +25,7 @@ eventually — iOS/Android clients.
 | Web UI direction | **Island architecture: Qute shell + Svelte islands; thick web-api, thin frontend** *(decided 2026-08-07)* | Planned interactions (photo annotation — draw boxes on a space picture and turn them into items/containers — and more to come) are real client-side interactivity, but the app's majority remains server-rendered CRUD. So: keep the Qute/Pico shell; mount self-contained **Svelte** components compiled as custom elements exactly where interactivity is needed (`quarkus-web-bundler` keeps the npm build inside Maven, TypeScript for island code). If the app ever tips majority-interactive, islands migrate into **SvelteKit** — a gradient, not a rewrite cliff. (React islands were the considered alternative; rejected for now: heavier baseline, ecosystem weight not yet needed.) Complementary principle: **web-api thickens, frontend thins** — aggregation, pagination, derived display fields live in web-api (serving web and future mobile once); business rules stay in inventory-server; the webapp renders and holds the session. Boundary test: an `if` that changes what is *allowed* belongs in inventory-server; one that changes what is *shown* may live in web-api; the webapp only renders. |
 | Label printer hardware | **Brother PT-P750W first** *(decided 2026-08-08; printer in hand)* | Wi-Fi with a built-in print server accepting **raw TCP 9100** — exactly the transport stage 3 was designed around — and it speaks Brother's **documented** raster protocol (official Raster Command Reference; `ptouch-print` as OSS prior art), so the encode stage implements a spec instead of reverse-engineering. Constraints accepted: TZe tape ≤ 24 mm at 180 dpi (~128-dot head) → continuous strips, QR ≤ ~18 mm with text lengthwise; first physical gate is phone-scannability of an 18 mm QR. The DYMO MobileLabeler (1982171) was evaluated and rejected for system integration: Bluetooth-only, proprietary/undocumented app-oriented protocol, and Bluetooth-into-container plumbing — it stays a manual label maker. **Second target (ordered 2026-08-09, arriving ~2026-08-13): Zebra GK420t** — thermal transfer (temperature-stable labels; polypropylene + wax/resin ribbon is the recommended media), 203 dpi, 4-inch die-cut stock, ZPL — which turns the recorded ZPL reference encoder into real hardware. On arrival, verify which connectivity variant it is: Ethernet gives the standard TCP-9100 transport; a USB-only unit needs a transport decision before integration. Everything stays behind `LabelPrinter`, so none of this forecloses other vendors. |
 | Federated identity | **`user_identities(provider, subject)` join table; email demoted to profile data** *(decided 2026-08-13, with Sign in with Apple)* | Today every lookup is email-keyed and `InventoryUser` even documents email as "the Google OIDC subject email". Apple breaks that: "Hide My Email" hands out per-app `@privaterelay.appleid.com` addresses, so email is neither stable nor matchable across providers. The stable key each provider guarantees is the OIDC `sub` claim, scoped to the issuer — hence a `(provider, subject) → user_id` join table, identity-first resolution at the exchange (subject match → email match linking a new provider to an existing account → invited/auto provisioning policy), and Google logins start recording their `sub` too. `TokenService`, sessions, and admin stay provider-agnostic — nothing downstream of the exchange changes. |
+| Formal releases | **Tag-driven CI releases; container images to private GHCR under the `inventory-root` namespace; mobile releases on separate tracks** *(decided 2026-08-14)* | Images are the target artifact for all non-mobile code — the apps embed the libraries, every consumer builds from source in the one reactor, so no Maven artifact repository is needed (revisit only if an external build ever consumes the jars). One version for the whole platform: a `vX.Y.Z` tag on the superproject releases everything together, sidestepping the multi-repo ordering problem that breaks `maven-release-plugin` (one SCM per reactor is assumed; we have seven). All images publish to **private GHCR under `ghcr.io/<owner>/inventory-root/<module>`** — grouped in one place, each keeping its own name. `develop` stays SNAPSHOT forever; release versions exist only at tags (CI-friendly `${revision}` + flatten). iOS (and later Android) release through store channels (TestFlight/App Store, Play Console) with their own versioning and signing — deliberately not part of the image pipeline. |
 | Label/QR rendering in native | **`quarkus-awt`** *(revised 2026-08-06; supersedes the pure-PNG-encoder decision of 2026-08-05)* | Labels will compose text and possibly other images alongside the QR — that is real Java2D (`Graphics2D`, fonts), which a bare PNG encoder cannot do. quarkus-awt makes AWT work in native images with Quarkus maintaining the metadata. Costs accepted: native images are Linux-only (the deploy target is Linux containers anyway) and the container image must carry fonts + fontconfig. macOS development is unaffected — headless AWT works fully on the JVM, so all dev and tests run on the Mac; native verification happens by container-building and container-running. If labels ever turn out to be QR-only after all, the pure-JDK 1-bit PNG encoder over zxing's `BitMatrix` remains the recorded simplification option. |
 
 ## Architecture
@@ -294,6 +295,20 @@ rather than an emergency patch.
   Program account (Services ID = OIDC client-id, ES256 signing key, team ID) and an
   HTTPS redirect URL (Apple refuses plain-http callbacks — real logins need a
   TLS-fronted deployment or a tunnel even in dev).
+
+### Phase 14 — Formal releases: tag-driven images to private GHCR *(thirteenth milestone — detail below; added 2026-08-14)*
+- One `vX.Y.Z` tag on the superproject releases the whole platform: CI builds the
+  reactor at that version, publishes native images for `inventory-web-api`,
+  `inventory-web-app`, and `inventory-exporter` to **private GHCR under
+  `ghcr.io/<owner>/inventory-root/<module>:<version>`**, and mirrors the tag into
+  every submodule repo. No Maven artifact publishing — images are the deliverable
+  (see the decision row).
+- **Mobile is explicitly separate.** iOS releases via the store track (Xcode archive
+  → TestFlight → App Store; `MARKETING_VERSION`; signing; needs the Phase 11 Apple
+  Developer account) and Android, when it exists, via its own (Play Console, signed
+  AAB). Store review cycles, signing chains, and versioning have nothing in common
+  with image publishing — forcing them into one pipeline would couple a `git tag`
+  to human review timelines. Each gets its own phase when distribution starts.
 
 ## First milestone (Phase 1, implementable detail)
 
@@ -841,6 +856,60 @@ credentials; the flip-on is config + secrets only.*
 6. **Gate** — `mvn verify` green locally and in CI with zero Apple config present;
    manual end-to-end Apple login deferred until the Apple Developer account exists
    (Phase 11 checklist) and a TLS-fronted redirect URL is available.
+
+## Thirteenth milestone (Phase 14: formal releases)
+
+*Added 2026-08-14. Everything stays inert until a `v*` tag is pushed; `develop` is
+SNAPSHOT forever. Not yet executed.*
+
+1. **CI-friendly versions.** Modules move from literal `0.0.1-SNAPSHOT` to
+   `${revision}` (default `0.0.1-SNAPSHOT` set in `inventory-parent`), with
+   `flatten-maven-plugin` (`flattenMode=resolveCiFriendliesOnly`) so installed poms
+   carry resolved versions; `${inventory.version}` in the parent follows. A release
+   build is just `mvn -Drevision=1.2.0 …` — no pom edits, no release plugin.
+   *Gate: full `mvn verify` green both bare and with `-Drevision` set; flattened
+   poms show the resolved version.*
+2. **Release workflow.** `release.yml` in the superproject, triggered by tags
+   matching `v*`: recursive checkout (SUBMODULE_TOKEN), build the reactor at
+   `-Drevision=${tag#v}`, native-image the three apps
+   (`-Dnative -Dquarkus.native.container-build=true`), `docker build` each
+   `Dockerfile.native`, push to `ghcr.io/<owner>/inventory-root/<module>:<version>`
+   plus `:latest`, stamped with `org.opencontainers.image.source` pointing at
+   inventory-root so the packages group under it. `GITHUB_TOKEN` with
+   `packages: write` does the push; **verify the three packages are Private in the
+   GHCR UI after the first release** (user-account packages default private, but the
+   gate is checking, not assuming). Draft a GitHub Release with the compose overlay
+   snippet for that version. *Gate: pushing a `v0.0.1` pre-release tag produces
+   three private packages under the inventory-root namespace and a green run.*
+3. **Submodule tag mirroring.** The release ceremony (not CI) tags each submodule
+   repo with the same `vX.Y.Z` at the SHA the superproject records — locally, so
+   SUBMODULE_TOKEN stays read-only. *Gate: after a release, `git tag --contains`
+   in any submodule finds the version at the recorded pointer.*
+4. **`just release <version>`.** The one command: refuses on a dirty tree or off
+   `develop`/`master`, runs the full verify, optionally drives the git-flow
+   release-branch ceremony (`git flow release start/finish`), creates the
+   superproject tag + mirrored submodule tags, and prints exactly what to push
+   (nothing pushes without the user's say — house rule). *Gate: dry-run mode shows
+   the plan; a real run on a scratch tag produces the tags locally.*
+5. **Compose consumes releases.** `docker-compose.release.yml` overlay (or
+   `IMAGE_TAG` env) runs the stack from pulled
+   `ghcr.io/<owner>/inventory-root/<module>:<version>` images instead of local
+   builds — the deploy path for anything that isn't the dev machine. *Gate:
+   `docker compose -f docker-compose.yml -f docker-compose.release.yml up` serves
+   the smoke flow from pulled images.*
+6. **Devcontainer image joins the namespace.** `devcontainer-image.yml` publishes to
+   `ghcr.io/<owner>/inventory-root/inventory-devcontainer:latest`; `ci.yml`'s
+   container reference follows. (Tooling image: still `:latest`-only, not
+   release-versioned.) *Gate: CI green pulling the renamed image.*
+7. **Release runbook.** RUNBOOK section: cutting a release, verifying package
+   visibility, rolling back (retag/delete package version), and the
+   consumer-of-record note (compose overlay). *Gate: doc review against a real
+   release.*
+
+**Out of scope, own phases later**: iOS store releases (TestFlight/App Store,
+`MARKETING_VERSION`, signing — after the Phase 11 checklist lands), Android store
+releases, and any Maven artifact publishing (only if an external consumer ever
+needs the jars; GitHub Packages is the answer then).
 
 ## Label pipeline and printer testing
 
