@@ -12,9 +12,10 @@
     <module>inventory-parent</module>
     <module>inventory-api</module>
     <module>inventory-impl</module>
-    <!-- inventory-server: parked after the HTTP consolidation (VERTICLES.md);
-         its REST surface and backend wiring now live in inventory-web-api.
-         The submodule and its history remain; tagged before-remove-inventory-server. -->
+    <!-- inventory-server: restored as the event-bus worker host — the domain
+         services run here behind the bus fabric; inventory-web-api is the
+         authenticated HTTP gateway in front of it. -->
+    <module>inventory-server</module>
     <module>inventory-web-api</module>
     <module>inventory-web-app</module>
     <module>inventory-exporter</module>

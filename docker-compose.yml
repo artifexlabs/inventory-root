@@ -1,8 +1,28 @@
-# Native-image deployment of the whole inventory stack. Portable compose —
-# the same containers run under swarm/nomad/k8s once a target is chosen.
+# Deployment of the whole inventory stack. Portable compose — the same
+# containers run under swarm/nomad/k8s once a target is chosen.
+#
+# Topology (migrate_to_vertx_eb): inventory-web-api is the authenticated HTTP
+# gateway; ALL domain work crosses the clustered Vert.x event bus as envelopes
+# answered by inventory-server's workers (CRUD, audit, QR/label, users,
+# tokens, auth). The three bus members (gateway, server, exporter) run as JVM
+# containers — the vertx-infinispan cluster manager is the one component not
+# yet proven under GraalVM native; the web-app stays native.
+#
+# Cluster addressing is fully static (cluster-net IPs, not names): the
+# services sit on two networks, so interface-guessing binds and per-network
+# DNS answers can disagree — a node then listens on one network while peers
+# dial the other, and discovery never converges. Static IPs pin membership
+# (JGroups :7800), discovery, AND the event-bus message transport
+# (quarkus.vertx.cluster.host/:15701 — a SEPARATE socket whose localhost
+# default silently drops every remote delivery).
+#
+# SECURITY: the cluster network is internal-only and must stay that way — bus
+# membership is access (VERTICLES.md); the envelope fabric token
+# (INVENTORY_BUS_TOKEN) is defense in depth, not the perimeter. Never publish
+# 7800 or 15701.
 #
 # Bring-up:  docker compose up -d          (migrate runs Liquibase, then exits 0)
-# Smoke:     see RUNBOOK.md
+# Smoke:     see RUNBOOK.md / DEPLOYMENT.md
 # Teardown:  docker compose down           (add -v to ALSO destroy the database)
 services:
 
@@ -36,49 +56,98 @@ services:
       --changelog-file=db/changelog-master.yaml
       update
 
-  # The single HTTP tier (post-consolidation, see VERTICLES.md): domain REST,
-  # OpenAPI, and the backing stores in one service. inventory-server is parked.
-  inventory-web-api:
+  # The worker host: owns storage, transactions, audit, printing. No HTTP
+  # surface beyond internal health (:8082, unpublished); all work arrives as
+  # bus envelopes and must carry the fabric token + the acting user's role.
+  inventory-server:
     build:
-      context: inventory-web-api
-      dockerfile: src/main/docker/Dockerfile.native
-    image: inventory-web-api:native
+      context: inventory-server
+      dockerfile: src/main/docker/Dockerfile.jvm
+    image: inventory-server:jvm
     environment:
       INVENTORY_STORAGE: pg
       QUARKUS_DATASOURCE_REACTIVE_URL: postgresql://postgres:5432/inventory
       QUARKUS_DATASOURCE_USERNAME: inventory
       QUARKUS_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-inventory}
       QUARKUS_DEVSERVICES_ENABLED: "false"
-      INVENTORY_QR_BASE_URL: http://localhost:8082
+      INVENTORY_BUS_TOKEN: ${INVENTORY_BUS_TOKEN:-dev-bus-token}
       INVENTORY_ADMIN_EMAIL: ${INVENTORY_ADMIN_EMAIL:-admin@example.com}
       INVENTORY_ADMIN_PASSWORD: ${INVENTORY_ADMIN_PASSWORD:-change-me}
+      # after-commit domain facts keep flowing to consumers (exporter)
+      INVENTORY_EVENTS_BUS: clustered
       # Label printer (Phase 9): defaults to the log printer; set
       # INVENTORY_PRINTER=brother-p750w + INVENTORY_PRINTER_HOST in .env for hardware.
       INVENTORY_PRINTER: ${INVENTORY_PRINTER:-log}
       INVENTORY_PRINTER_HOST: ${INVENTORY_PRINTER_HOST:-}
       INVENTORY_PRINTER_PORT: ${INVENTORY_PRINTER_PORT:-9100}
       INVENTORY_PRINTER_TAPE_MM: ${INVENTORY_PRINTER_TAPE_MM:-24}
+      QUARKUS_VERTX_CLUSTER_CLUSTERED: "true"
+      QUARKUS_VERTX_CLUSTER_HOST: 172.28.0.12
+      QUARKUS_VERTX_CLUSTER_PORT: "15701"
+      JAVA_TOOL_OPTIONS: >-
+        -Djgroups.bind.address=172.28.0.12
+        -Djgroups.tcpping.initial_hosts=172.28.0.11[7800],172.28.0.12[7800],172.28.0.13[7800]
+        -Djava.net.preferIPv4Stack=true
     depends_on:
       postgres:
         condition: service_healthy
       migrate:
         condition: service_completed_successfully
+    networks:
+      default:
+      cluster:
+        ipv4_address: 172.28.0.12
+
+  # The authenticated HTTP gateway: REST + OpenAPI + the authentication
+  # boundary. No storage of its own (remote workers); every request becomes
+  # an envelope on the bus attributed to the authenticated user.
+  inventory-web-api:
+    build:
+      context: inventory-web-api
+      dockerfile: src/main/docker/Dockerfile.jvm
+    image: inventory-web-api:jvm
+    environment:
+      INVENTORY_BUS_WORKERS: remote
+      INVENTORY_BUS_TOKEN: ${INVENTORY_BUS_TOKEN:-dev-bus-token}
+      QUARKUS_DEVSERVICES_ENABLED: "false"
+      INVENTORY_QR_BASE_URL: http://localhost:8082
+      QUARKUS_VERTX_CLUSTER_CLUSTERED: "true"
+      QUARKUS_VERTX_CLUSTER_HOST: 172.28.0.11
+      QUARKUS_VERTX_CLUSTER_PORT: "15701"
+      JAVA_TOOL_OPTIONS: >-
+        -Djgroups.bind.address=172.28.0.11
+        -Djgroups.tcpping.initial_hosts=172.28.0.11[7800],172.28.0.12[7800],172.28.0.13[7800]
+        -Djava.net.preferIPv4Stack=true
+    depends_on:
+      - inventory-server
     ports:
       - "8081:8081"
+    networks:
+      default:
+      cluster:
+        ipv4_address: 172.28.0.11
 
   # Reference event consumer (VERTICLES.md stage 5): polls the audit_events
-  # cursor — fully correct with no bus. The clustered-bus override
-  # (docker-compose.cluster.yml) upgrades it to sub-second push.
+  # cursor — fully correct on its own; cluster membership upgrades it to
+  # sub-second push via the after-commit facts the server publishes.
   inventory-exporter:
     build:
       context: inventory-exporter
-      dockerfile: src/main/docker/Dockerfile.native
-    image: inventory-exporter:native
+      dockerfile: src/main/docker/Dockerfile.jvm
+    image: inventory-exporter:jvm
     environment:
       QUARKUS_DATASOURCE_REACTIVE_URL: postgresql://postgres:5432/inventory
       QUARKUS_DATASOURCE_USERNAME: inventory
       QUARKUS_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-inventory}
       QUARKUS_DEVSERVICES_ENABLED: "false"
+      INVENTORY_EVENTS_BUS: clustered
+      QUARKUS_VERTX_CLUSTER_CLUSTERED: "true"
+      QUARKUS_VERTX_CLUSTER_HOST: 172.28.0.13
+      QUARKUS_VERTX_CLUSTER_PORT: "15701"
+      JAVA_TOOL_OPTIONS: >-
+        -Djgroups.bind.address=172.28.0.13
+        -Djgroups.tcpping.initial_hosts=172.28.0.11[7800],172.28.0.12[7800],172.28.0.13[7800]
+        -Djava.net.preferIPv4Stack=true
     depends_on:
       postgres:
         condition: service_healthy
@@ -86,6 +155,10 @@ services:
         condition: service_completed_successfully
     ports:
       - "8083:8083"
+    networks:
+      default:
+      cluster:
+        ipv4_address: 172.28.0.13
 
   inventory-web-app:
     build:
@@ -104,15 +177,22 @@ services:
       - "8082:8082"
 
   # Phase 9 step 4: a TCP 9100 sink standing in for the label printer, so the
-  # END-TO-END print path (native server included) verifies without hardware.
-  # Off by default; `--profile fake-printer` starts it, and pointing the server
-  # at it (INVENTORY_PRINTER_HOST=fake-printer) captures each job under /jobs.
+  # END-TO-END print path verifies without hardware. Off by default;
+  # `--profile fake-printer` starts it, and pointing the server at it
+  # (INVENTORY_PRINTER_HOST=fake-printer) captures each job under /jobs.
   fake-printer:
     image: alpine:3.20
     profiles: ["fake-printer"]
     command: sh -c 'i=0; while true; do i=$$((i+1)); nc -l -p 9100 > /jobs/job-$$i.bin; done'
     volumes:
       - fake-printer-jobs:/jobs
+
+networks:
+  cluster:
+    internal: true
+    ipam:
+      config:
+        - subnet: 172.28.0.0/24
 
 volumes:
   pgdata:

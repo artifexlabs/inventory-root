@@ -5,6 +5,18 @@ executed yet. Companion to [PLAN.md](PLAN.md) (whose Architecture/Topology bulle
 module table will need updating when the consolidation stage executes) and
 [RUNBOOK.md](RUNBOOK.md).*
 
+> **SUPERSEDED IN PART (migrate_to_vertx_eb, 2026-08-14).** By owner decision, the
+> topology moved beyond this document's "facts only" stance: `inventory-server` is
+> restored as the bus worker host, and ALL domain work (CRUD, audit reads, QR/label,
+> users, tokens, authentication) now crosses the clustered Vert.x bus as
+> request/reply **envelopes** (`inventory.svc.*`, package
+> `org.lawfulevil.inventory.api.bus`) carrying the acting user, asserted roles, and
+> a shared fabric token; `inventory-web-api` is the authenticated HTTP gateway.
+> External inputs are authenticated at the gateway; services on the bus are
+> considered already authenticated. The fact stream (`inventory.events.*`), the
+> audit table as durable log, and the consumer catch-up protocol below remain
+> exactly as decided. See [DEPLOYMENT.md](DEPLOYMENT.md).
+
 ## The question
 
 An arbitrary number of additional Quarkus/Vert.x services will integrate with the

@@ -13,8 +13,9 @@ set dotenv-load := true
 
 # --- configuration (override via environment or .env) ------------------------
 
-# Post-consolidation (VERTICLES.md): inventory-web-api IS the domain server;
-# server_url is kept as an alias so smoke/drill recipes read naturally.
+# migrate_to_vertx_eb: inventory-web-api is the authenticated HTTP gateway
+# (the only API entrypoint); the domain work happens in inventory-server's
+# bus workers. server_url stays an alias so smoke/drill recipes read naturally.
 server_url := env('INVENTORY_SERVER_URL', 'http://localhost:8081')
 webapi_url := env('INVENTORY_WEB_API_URL', 'http://localhost:8081')
 webapp_url := env('INVENTORY_WEBAPP_URL', 'http://localhost:8082')
@@ -53,18 +54,26 @@ native module:
     @echo "-> delegating to Maven: native build of {{ module }} ({{ native_flags }})"
     mvn -pl {{ module }} -am package {{ native_flags }}
 
-# Native executables for all three apps.
+# JVM fast-jars for the bus members (gateway, server, exporter): the
+# vertx-infinispan cluster manager is not yet proven under GraalVM native,
+# so cluster members ship as JVM containers.
 [group('build')]
-natives: (native "inventory-web-api") (native "inventory-web-app")
+fastjars:
+    @echo "-> delegating to Maven: fast-jars for the bus members"
+    mvn -pl inventory-server,inventory-web-api,inventory-exporter -am package -DskipTests
 
-# Container images from the native executables.
+# Native executables (web-app only in the deployed stack).
+[group('build')]
+natives: (native "inventory-web-app")
+
+# Container images from the built artifacts.
 [group('build')]
 images:
     docker compose build
 
-# Everything: natives, then images.
+# Everything: fast-jars + natives, then images.
 [group('build')]
-build-all: natives images
+build-all: fastjars natives images
 
 # --- dev (live-coding; one terminal per tier) --------------------------------
 
@@ -73,11 +82,20 @@ _sync-libs:
     @echo "-> delegating to Maven: installing inventory-api + inventory-impl to ~/.m2 (dev prerequisite)"
     mvn -q -B -pl inventory-impl -am install -DskipTests
 
-# inventory-web-api in live-coding mode on :8081 (the domain tier; memory storage).
+# inventory-web-api in live-coding mode on :8081 (embedded bus workers on the
+# local bus — the full envelope path in one process; memory storage).
 [group('dev')]
 dev-web-api: _sync-libs
-    @echo "-> delegating to Maven: quarkus:dev inventory-web-api (http://localhost:8081)"
+    @echo "-> delegating to Maven: quarkus:dev inventory-web-api (http://localhost:8081, embedded workers)"
     mvn -pl inventory-web-api quarkus:dev
+
+# inventory-server in live-coding mode (bus worker host; pair with a
+# remote-mode gateway for two-process dev — see DEPLOYMENT.md). Health moves
+# to :8084 here so dev-webapp keeps :8082.
+[group('dev')]
+dev-server: _sync-libs
+    @echo "-> delegating to Maven: quarkus:dev inventory-server (bus workers; health on :8084)"
+    mvn -pl inventory-server quarkus:dev -Dquarkus.http.port=8084
 
 # inventory-web-app in live-coding mode on :8082 (the browser entrypoint).
 [group('dev')]

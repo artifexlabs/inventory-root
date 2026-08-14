@@ -1,0 +1,22 @@
+# Released-version overlay: swap locally built images for the versioned
+# images in the private GHCR namespace (PLAN.md Phase 14). Usage:
+#
+#   INVENTORY_VERSION=1.2.3 docker compose \
+#     -f docker-compose.yml -f docker-compose.release.yml up -d
+#
+# `up` uses the named image when it exists locally and pulls it otherwise;
+# it never builds. `docker compose ... pull` first to pre-fetch. Requires
+# `docker login ghcr.io` with a token that can read the private packages.
+services:
+
+  inventory-server:
+    image: ghcr.io/${INVENTORY_GHCR_OWNER:-mykelalvis}/inventory-root/inventory-server:${INVENTORY_VERSION:-latest}
+
+  inventory-web-api:
+    image: ghcr.io/${INVENTORY_GHCR_OWNER:-mykelalvis}/inventory-root/inventory-web-api:${INVENTORY_VERSION:-latest}
+
+  inventory-exporter:
+    image: ghcr.io/${INVENTORY_GHCR_OWNER:-mykelalvis}/inventory-root/inventory-exporter:${INVENTORY_VERSION:-latest}
+
+  inventory-web-app:
+    image: ghcr.io/${INVENTORY_GHCR_OWNER:-mykelalvis}/inventory-root/inventory-web-app:${INVENTORY_VERSION:-latest}

@@ -30,18 +30,20 @@ Configuration comes from the environment (or `.env`, which just auto-loads):
 `INVENTORY_SERVER_URL`, `INVENTORY_WEB_API_URL`, `INVENTORY_ADMIN_EMAIL`,
 `INVENTORY_ADMIN_PASSWORD`, `POSTGRES_PASSWORD` — defaults match the compose stack.
 
-## Build native images
+## Build images
 
 ```sh
-mvn -pl inventory-web-api -am package -DskipTests -Dnative -Dquarkus.native.container-build=true
+mvn -pl inventory-server,inventory-web-api,inventory-exporter -am package -DskipTests   # JVM fast-jars (bus members)
 mvn -pl inventory-web-app -am package -DskipTests -Dnative -Dquarkus.native.container-build=true
 docker compose build
 ```
 
-The `native` Maven profile lives in `inventory-parent`; `-Dnative` activates it.
-The server image installs `fontconfig` + `dejavu-sans-fonts` — required for label text
-rendering (quarkus-awt). Native images are Linux-only by design; macOS runs them via
-the compose stack below, never directly.
+The three bus members (gateway, server, exporter) ship as JVM containers: the
+vertx-infinispan cluster manager is the one component not yet proven under GraalVM
+native. The web-app stays native (`native` profile in `inventory-parent`;
+`-Dnative` activates it). The server's native Dockerfile still exists for a future
+single-process/native experiment and installs `fontconfig` + `dejavu-sans-fonts` —
+required for label text rendering (quarkus-awt).
 
 ## Bring up / tear down
 
@@ -52,22 +54,24 @@ docker compose down       # stop stack, KEEP data
 docker compose down -v    # stop stack, DESTROY database volume
 ```
 
-Ports: server 8080, web-api 8081, webapp 8082. Browser entry: http://localhost:8082
+Ports: web-api (gateway) 8081, webapp 8082, exporter 8083; inventory-server has no
+published port (internal health only — all its work arrives over the bus fabric).
+Browser entry: http://localhost:8082
 (login with the seeded admin, default `admin@example.com` / `change-me` — override via
 `INVENTORY_ADMIN_EMAIL` / `INVENTORY_ADMIN_PASSWORD`).
 
 ## Smoke flow (the standing check)
 
 ```sh
-TOKEN=$(curl -s -X POST localhost:8080/api/v1/auth/login \
+TOKEN=$(curl -s -X POST localhost:8081/api/v1/auth/login \
   -H 'Content-Type: application/json' \
   -d '{"email":"admin@example.com","password":"change-me"}' | sed -E 's/.*"token":"([^"]+)".*/\1/')
-curl -s -H "Authorization: Bearer $TOKEN" localhost:8080/api/v1/items            # CRUD read
+curl -s -H "Authorization: Bearer $TOKEN" localhost:8081/api/v1/items            # CRUD read (gateway → bus → server)
 ID=$(curl -s -X POST -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
-  -d '{"name":"smoke-item","type":"tool"}' localhost:8080/api/v1/items | sed -E 's/.*"id":"([^"]+)".*/\1/')
-curl -s -H "Authorization: Bearer $TOKEN" localhost:8080/api/v1/items/$ID/qr.png -o /tmp/qr.png
+  -d '{"name":"smoke-item","type":"tool"}' localhost:8081/api/v1/items | sed -E 's/.*"id":"([^"]+)".*/\1/')
+curl -s -H "Authorization: Bearer $TOKEN" localhost:8081/api/v1/items/$ID/qr.png -o /tmp/qr.png
 file /tmp/qr.png                                                                 # PNG image data
-curl -s -X POST -H "Authorization: Bearer $TOKEN" localhost:8080/api/v1/items/$ID/print-label -w '%{http_code}\n'
+curl -s -X POST -H "Authorization: Bearer $TOKEN" localhost:8081/api/v1/items/$ID/print-label -w '%{http_code}\n'
 curl -s -H "Authorization: Bearer $TOKEN" "localhost:8081/api/v1/views/items?query=smoke" # BFF view
 ```
 
@@ -182,39 +186,47 @@ enough — see [MOBILE-READINESS.md](MOBILE-READINESS.md)) or when the app scaff
 does not exist yet (Phase 12 not executed). Signed device builds, TestFlight, and
 macOS CI runners are deliberately outside these recipes until distribution starts.
 
-## Domain events and the clustered bus (VERTICLES.md)
+## The event-bus fabric (migrate_to_vertx_eb topology)
 
-Every mutation writes an `audit_events` row in its own transaction; that table is
-the durable event log. `inventory-exporter` (:8083) is the reference consumer: it
-pages `audit_events.seq` from a durable cursor and lands `item.*` / `label.print`
-facts in its `exports` table exactly once. **Poll-only mode is fully correct** —
-the base compose runs it that way with no cluster at all.
+The clustered Vert.x bus is now the deployment's spine, carrying two distinct
+kinds of traffic (see [DEPLOYMENT.md](DEPLOYMENT.md) for the full deploy method):
 
-The clustered bus is an opt-in latency upgrade:
+1. **Request/reply envelopes** (`inventory.svc.*`): every HTTP request the
+   gateway (`inventory-web-api`) authenticates becomes a `BusEnvelope` — action,
+   target id, typed payload, acting user, asserted roles, shared fabric token —
+   answered by `inventory-server`'s workers (CRUD, audit, QR/label, users,
+   tokens, auth). Workers refuse bad fabric tokens (401) and missing roles (403)
+   before touching the domain.
+2. **After-commit facts** (`inventory.events.*`): unchanged publish-only
+   announcements; the `audit_events` table stays the durable log of record.
 
-```sh
-mvn -pl inventory-web-api,inventory-exporter -am package -DskipTests   # fast-jars
-docker compose -f docker-compose.yml -f docker-compose.cluster.yml up -d
-```
+`inventory-exporter` (:8083) is the reference fact consumer: it pages
+`audit_events.seq` from a durable cursor and lands `item.*` / `label.print`
+facts in its `exports` table exactly once. **Poll-only mode remains fully
+correct** for consumers; cluster membership is their latency upgrade. The
+gateway, in contrast, REQUIRES the fabric — no workers, no API.
 
-- web-api and the exporter join a Vert.x cluster (vertx-infinispan, JGroups
-  TCPPING static discovery) over the internal-only `cluster` network; facts
-  arrive sub-second instead of at the poll interval. Both run as JVM containers
-  there — the cluster manager is the one piece not proven under GraalVM native
-  (documented fallback); everything else stays native.
-- **Ports**: JGroups TCP 7800 (+`FD_SOCK2` at 57800) — cluster network only,
-  NEVER published. Bus membership is access; the network is the security boundary.
-- **Symptoms**: `ISPN000094: Received new cluster view ... (2)` on both sides =
-  healthy pair. Repeated view churn or `(1)` views on both = split brain — check
-  `jgroups.tcpping.initial_hosts` matches the service names and that both
-  containers share the `cluster` network. Events during a partition are NOT lost:
-  the exporter's reconciliation poll sweeps them from the table.
-- **Consumer recovery is trivial by design**: a consumer is just a cursor. Wipe or
-  reset its `consumer_cursors` row and it replays idempotently from wherever you
-  point it (`seq = 0` = full history).
-- Config: `inventory.events.bus` = `none` (default) | `local` | `clustered`;
-  exporter poll interval `inventory.exporter.poll-interval-ms` (30 s under the
-  overlay, so live latency demonstrably comes from the bus).
+- The three bus members (gateway .11, server .12, exporter .13) hold static IPs
+  on the internal-only `cluster` network (172.28.0.0/24): static addressing pins
+  JGroups membership (:7800), TCPPING discovery, and the separate Vert.x
+  event-bus message transport (:15701, whose localhost default silently drops
+  remote deliveries).
+- **Ports**: JGroups TCP 7800 (+`FD_SOCK2` at 57800) and bus transport 15701 —
+  cluster network only, NEVER published. Bus membership is access; the network
+  is the security boundary; the envelope fabric token is defense in depth.
+- **Symptoms**: `ISPN000094: Received new cluster view ... (3)` everywhere =
+  healthy trio. Repeated view churn or `(1)` views = split brain — check
+  `jgroups.tcpping.initial_hosts` lists all three static IPs and that every
+  member sits on the `cluster` network. During a partition: gateway requests
+  fail 503 (nothing is silently dropped — request/reply has no store-and-forward);
+  facts are NOT lost — the exporter's reconciliation poll sweeps the table.
+- **Consumer recovery is trivial by design**: a consumer is just a cursor. Wipe
+  or reset its `consumer_cursors` row and it replays idempotently from wherever
+  you point it (`seq = 0` = full history).
+- Config: `inventory.bus.workers` = `embedded` (single-process dev/test) |
+  `remote` (deployment); `inventory.bus.token` (shared fabric token);
+  `inventory.events.bus` = `none` (default) | `local` | `clustered`; exporter
+  poll interval `inventory.exporter.poll-interval-ms`.
 
 ## Notes
 
