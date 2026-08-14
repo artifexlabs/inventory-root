@@ -28,6 +28,57 @@ eventually — iOS/Android clients.
 | Formal releases | **Tag-driven CI releases; container images to private GHCR under the `inventory-root` namespace; mobile releases on separate tracks** *(decided 2026-08-14)* | Images are the target artifact for all non-mobile code — the apps embed the libraries, every consumer builds from source in the one reactor, so no Maven artifact repository is needed (revisit only if an external build ever consumes the jars). One version for the whole platform: a `vX.Y.Z` tag on the superproject releases everything together, sidestepping the multi-repo ordering problem that breaks `maven-release-plugin` (one SCM per reactor is assumed; we have seven). All images publish to **private GHCR under `ghcr.io/<owner>/inventory-root/<module>`** — grouped in one place, each keeping its own name. `develop` stays SNAPSHOT forever; release versions exist only at tags (CI-friendly `${revision}` + flatten). iOS (and later Android) release through store channels (TestFlight/App Store, Play Console) with their own versioning and signing — deliberately not part of the image pipeline. |
 | Label/QR rendering in native | **`quarkus-awt`** *(revised 2026-08-06; supersedes the pure-PNG-encoder decision of 2026-08-05)* | Labels will compose text and possibly other images alongside the QR — that is real Java2D (`Graphics2D`, fonts), which a bare PNG encoder cannot do. quarkus-awt makes AWT work in native images with Quarkus maintaining the metadata. Costs accepted: native images are Linux-only (the deploy target is Linux containers anyway) and the container image must carry fonts + fontconfig. macOS development is unaffected — headless AWT works fully on the JVM, so all dev and tests run on the Mac; native verification happens by container-building and container-running. If labels ever turn out to be QR-only after all, the pure-JDK 1-bit PNG encoder over zxing's `BitMatrix` remains the recorded simplification option. |
 
+## Decision needed SOON — Locations vs. unified containment *(raised 2026-08-14; decide before inventory is widespread)*
+
+**The question**: keep `Location` as a separate concept, or drop it in favor of
+containers-with-coordinates — one physical hierarchy where a "location" is just a
+root container (house → room → shelf → box), and an item's effective coordinates
+are inherited from the nearest ancestor container that has a pin.
+
+**Why it must be decided early**: the migration converts every `Location` row into
+a root container item and every `items.location_id` reference into a containment
+edge, and it ripples across the schema, `/api/v1/locations`, the bus actions, the
+web-app locations page, the iOS app, and the `locationName` view field. All of
+that cost scales with how much inventory data and how many clients exist —
+cheap now, expensive after the system is widespread. **Deferring the decision is
+choosing the status quo at compounding interest.**
+
+**What argues for the collapse**: physically there IS only one hierarchy — places
+are big immovable containers. The current split lets containment and `locationId`
+drift (a tote marked "garage" gets boxed into one marked "attic"; nothing
+reconciles them), while coordinate inheritance handles moves better than today:
+move the tote to the cabin and its contents come along; under the current model
+the contents keep stale locationIds.
+
+**What argues against / blockers**:
+1. **Multi-membership is the real blocker**: `addToContainer` permits an item in
+   several containers at once (only `moveToContainer` is exclusive). Inherited
+   coordinates are ambiguous in a DAG — the collapse REQUIRES committing to
+   single-parent placement (a tree). That is a semantic decision, not a refactor.
+2. The audit/event vocabulary is a public contract (VERTICLES.md):
+   `location.create/delete` need a deprecation window, not deletion.
+3. Client surface: REST, bus, web UI, iOS, views, Liquibase schema all touch.
+
+**Recommended shape if adopted** (staged): (a) commit to single-container
+placement — `moveToContainer` semantics become the only write path; (b) add
+optional `LatLong` to `Item`; (c) migrate each `Location` to a root container
+item of `type=location`, `location_id` references → containment edges;
+(d) keep `/api/v1/locations` as a compatibility view over `type=location` items
+while web/iOS migrate; (e) emit both audit vocabularies through the deprecation
+window. Coordinates resolve as "nearest ancestor with a pin."
+
+**Cheap interim if deferred**: keep `Location`, but derive an item's effective
+location by walking up the containment chain (containment wins over the item's
+own `locationId`) — kills the drift problem with no schema or client changes.
+
+**What Locations could grow into if kept instead** (the other fork): hierarchy
+(house → room → shelf), place metadata (address, access notes, a room photo
+annotated with the existing region machinery), location-scoped reports and
+audit filters (insurance/valuation per site), per-site par values, GPS
+auto-suggest in the mobile app, a QR at the door opening "what's in this room",
+and location-scoped roles once multi-user arrives. Choosing to keep Locations
+should mean investing in some of this, not letting them stay a bare name+pin.
+
 ## Architecture
 
 - **Quarkus 3.x (latest LTS)** everywhere a process runs. GraalVM native container images
@@ -961,6 +1012,10 @@ the native/Linux constraint applies only to the shipped binary, never to develop
 
 ## Open unknowns (tracked, not blocking)
 
+- **Locations vs. unified containment** — see the "Decision needed SOON" section
+  at the top of this plan. Unlike the rest of this list it IS time-sensitive: the
+  migration cost compounds with data volume and client count, so it should be
+  decided before inventory is widespread.
 - ~~iOS/Android app stack~~ — both decided 2026-08-09 with compiling skeletons:
   native SwiftUI universal (iOS, Phase 12) and native Kotlin + Jetpack Compose
   (Android, its own phase). Remaining open: mobile app timeline/scope beyond the
