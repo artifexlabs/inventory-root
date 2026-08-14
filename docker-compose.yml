@@ -36,11 +36,13 @@ services:
       --changelog-file=db/changelog-master.yaml
       update
 
-  inventory-server:
+  # The single HTTP tier (post-consolidation, see VERTICLES.md): domain REST,
+  # OpenAPI, and the backing stores in one service. inventory-server is parked.
+  inventory-web-api:
     build:
-      context: inventory-server
+      context: inventory-web-api
       dockerfile: src/main/docker/Dockerfile.native
-    image: inventory-server:native
+    image: inventory-web-api:native
     environment:
       INVENTORY_STORAGE: pg
       QUARKUS_DATASOURCE_REACTIVE_URL: postgresql://postgres:5432/inventory
@@ -61,18 +63,6 @@ services:
         condition: service_healthy
       migrate:
         condition: service_completed_successfully
-    ports:
-      - "8080:8080"
-
-  inventory-web-api:
-    build:
-      context: inventory-web-api
-      dockerfile: src/main/docker/Dockerfile.native
-    image: inventory-web-api:native
-    environment:
-      INVENTORY_SERVER_URL: http://inventory-server:8080
-    depends_on:
-      - inventory-server
     ports:
       - "8081:8081"
 

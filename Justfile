@@ -13,7 +13,9 @@ set dotenv-load := true
 
 # --- configuration (override via environment or .env) ------------------------
 
-server_url := env('INVENTORY_SERVER_URL', 'http://localhost:8080')
+# Post-consolidation (VERTICLES.md): inventory-web-api IS the domain server;
+# server_url is kept as an alias so smoke/drill recipes read naturally.
+server_url := env('INVENTORY_SERVER_URL', 'http://localhost:8081')
 webapi_url := env('INVENTORY_WEB_API_URL', 'http://localhost:8081')
 webapp_url := env('INVENTORY_WEBAPP_URL', 'http://localhost:8082')
 admin_email := env('INVENTORY_ADMIN_EMAIL', 'admin@example.com')
@@ -53,7 +55,7 @@ native module:
 
 # Native executables for all three apps.
 [group('build')]
-natives: (native "inventory-server") (native "inventory-web-api") (native "inventory-web-app")
+natives: (native "inventory-web-api") (native "inventory-web-app")
 
 # Container images from the native executables.
 [group('build')]
@@ -71,13 +73,7 @@ _sync-libs:
     @echo "-> delegating to Maven: installing inventory-api + inventory-impl to ~/.m2 (dev prerequisite)"
     mvn -q -B -pl inventory-impl -am install -DskipTests
 
-# inventory-server in live-coding mode on :8080 (memory storage).
-[group('dev')]
-dev-server: _sync-libs
-    @echo "-> delegating to Maven: quarkus:dev inventory-server (http://localhost:8080)"
-    mvn -pl inventory-server quarkus:dev
-
-# inventory-web-api in live-coding mode on :8081 (proxies to :8080).
+# inventory-web-api in live-coding mode on :8081 (the domain tier; memory storage).
 [group('dev')]
 dev-web-api: _sync-libs
     @echo "-> delegating to Maven: quarkus:dev inventory-web-api (http://localhost:8081)"
@@ -102,7 +98,7 @@ up:
 ps:
     docker compose ps -a --format 'table {{{{.Service}}\t{{{{.State}}\t{{{{.Status}}'
 
-# Follow logs; `just logs inventory-server` for one service.
+# Follow logs; `just logs inventory-web-api` for one service.
 [group('stack')]
 logs service="":
     docker compose logs -f {{ service }}
@@ -202,7 +198,7 @@ print-label id:
 # Warm: bounce the server process; data must survive.
 [group('drill')]
 drill-warm:
-    docker compose restart inventory-server
+    docker compose restart inventory-web-api
     @just _wait-ready
     @just smoke
 

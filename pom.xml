@@ -12,7 +12,9 @@
     <module>inventory-parent</module>
     <module>inventory-api</module>
     <module>inventory-impl</module>
-    <module>inventory-server</module>
+    <!-- inventory-server: parked after the HTTP consolidation (VERTICLES.md);
+         its REST surface and backend wiring now live in inventory-web-api.
+         The submodule and its history remain; tagged before-remove-inventory-server. -->
     <module>inventory-web-api</module>
     <module>inventory-web-app</module>
   </modules>
