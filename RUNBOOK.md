@@ -182,9 +182,41 @@ enough — see [MOBILE-READINESS.md](MOBILE-READINESS.md)) or when the app scaff
 does not exist yet (Phase 12 not executed). Signed device builds, TestFlight, and
 macOS CI runners are deliberately outside these recipes until distribution starts.
 
+## Domain events and the clustered bus (VERTICLES.md)
+
+Every mutation writes an `audit_events` row in its own transaction; that table is
+the durable event log. `inventory-exporter` (:8083) is the reference consumer: it
+pages `audit_events.seq` from a durable cursor and lands `item.*` / `label.print`
+facts in its `exports` table exactly once. **Poll-only mode is fully correct** —
+the base compose runs it that way with no cluster at all.
+
+The clustered bus is an opt-in latency upgrade:
+
+```sh
+mvn -pl inventory-web-api,inventory-exporter -am package -DskipTests   # fast-jars
+docker compose -f docker-compose.yml -f docker-compose.cluster.yml up -d
+```
+
+- web-api and the exporter join a Vert.x cluster (vertx-infinispan, JGroups
+  TCPPING static discovery) over the internal-only `cluster` network; facts
+  arrive sub-second instead of at the poll interval. Both run as JVM containers
+  there — the cluster manager is the one piece not proven under GraalVM native
+  (documented fallback); everything else stays native.
+- **Ports**: JGroups TCP 7800 (+`FD_SOCK2` at 57800) — cluster network only,
+  NEVER published. Bus membership is access; the network is the security boundary.
+- **Symptoms**: `ISPN000094: Received new cluster view ... (2)` on both sides =
+  healthy pair. Repeated view churn or `(1)` views on both = split brain — check
+  `jgroups.tcpping.initial_hosts` matches the service names and that both
+  containers share the `cluster` network. Events during a partition are NOT lost:
+  the exporter's reconciliation poll sweeps them from the table.
+- **Consumer recovery is trivial by design**: a consumer is just a cursor. Wipe or
+  reset its `consumer_cursors` row and it replays idempotently from wherever you
+  point it (`seq = 0` = full history).
+- Config: `inventory.events.bus` = `none` (default) | `local` | `clustered`;
+  exporter poll interval `inventory.exporter.poll-interval-ms` (30 s under the
+  overlay, so live latency demonstrably comes from the bus).
+
 ## Notes
 
-- Clustered Vert.x event bus: NOT configured — no inter-service event-bus traffic
-  exists yet (services talk HTTP). Add clustering config only when a consumer appears.
 - Orchestrator target (swarm/nomad/k8s) still open; this compose file is the portable
   reference deployment.

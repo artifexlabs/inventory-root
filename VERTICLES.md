@@ -136,16 +136,20 @@ need a relay/CDC daemon that the catch-up protocol makes unnecessary.
 
 ## Staged plan (each stage gated; everything off by default)
 
-1. **Contract + no-op wiring.** `events` package in `inventory-api`; `Pg*`/`InMemory*`
-   classes accept an `EventPublisher` (default `NOOP`); producer method in the backend
-   wiring. *Gate: full `mvn verify` green with zero behavior change.*
-2. **Cursorable log.** Changeset `013-audit-seq.yaml`; `AuditReader.since(seq, limit)`
-   in both impls. *Gate: Testcontainers test proves seq-ordered paging across
-   concurrent writers.*
-3. **Local bus.** `quarkus-vertx` dependency; `inventory.events.bus=none|local|clustered`
-   (default `none`, the repo's disabled-until-configured pattern); `local` publishes
-   in-JVM after commit. *Gate: test observes event ⇒ row is committed; native image
-   still builds and passes the existing smoke.*
+1. **Contract + no-op wiring** — **EXECUTED 2026-08-14.** `events` package in
+   `inventory-api` (`EventPublisher` with `NOOP` + `announce`/`announceAll`,
+   `InventoryEvents` addresses + versioned wire format); the published fact IS the
+   audit event (same id, built before the insert so row and bus payload match);
+   `Pg*` systems announce after commit, `PublishingAuditSink` decorates the sink
+   paths. *Gate met: full verify green, zero behavior change.*
+2. **Cursorable log** — **EXECUTED 2026-08-14.** Changeset `013-audit-seq.yaml`
+   (identity column, NOT bigserial — Liquibase degrades serial types on addColumn);
+   `AuditReader.since(seq, limit)` returning `SequencedEvent` in both impls. *Gate
+   met: concurrent-writer paging test — strictly increasing seq, exactly once.*
+3. **Local bus** — **EXECUTED 2026-08-14.** `quarkus-vertx`;
+   `inventory.events.bus=none|local|clustered` (default `none`). *Gate met:
+   LocalBusPublishTest (event on both addresses ⇒ same-id row already committed);
+   native container build of the consolidated web-api succeeds.*
 4. **HTTP consolidation** — **EXECUTED 2026-08-14.** REST resources,
    `InventoryBackendProducer`, `BearerTokenFilter`/`CurrentUser`, and OpenAPI moved
    from `inventory-server` into `inventory-web-api` (package
@@ -157,18 +161,30 @@ need a relay/CDC daemon that the catch-up protocol makes unnecessary.
    compose; repo + history remain, tagged `before-remove-inventory-server`).
    *Gate: 49 web-api tests green (all migrated domain tests incl. Pg/Testcontainers
    + rewritten views tests) and the full-workspace verify + dev-mode smoke below.*
-5. **Reference consumer: `inventory-exporter`.** New Quarkus service with a cursor
-   table and the catch-up→subscribe→reconcile loop; reacts to `item.*` /
-   `label.print` (e.g. webhook/CSV export). Poll-only first. *Gate: kill-and-restart
-   drill — mutations made while it was down all take effect exactly once.*
-6. **Clustered bus in compose.** vertx-infinispan, static discovery, private network,
-   member auth; `bus=clustered` for web-api + exporter. *Gate: live event observed in
-   the exporter < 1 s; killing the exporter mid-stream loses nothing. Native-image
-   fallback if the cluster manager fights GraalVM: bus members run as JVM containers,
-   HTTP-only services stay native.*
-7. **CI + runbook.** Clustered integration test in CI; RUNBOOK section for cluster
-   ports, split-brain symptoms, and recovery ("a consumer is just a cursor —
-   reset it and replay").
+5. **Reference consumer: `inventory-exporter`** — **EXECUTED 2026-08-14.** New
+   module/repo (:8083): `ExportLoop` drains `audit_events.seq` from a durable
+   cursor; `item.*`/`label.print` land in `exports` exactly once (event-id PK);
+   cursor advances in the same transaction as its batch; the bus only nudges the
+   drain — data always comes from the table. In base compose it runs poll-only
+   (fully correct, no cluster). *Gate met: kill-and-restart drill test.*
+6. **Clustered bus in compose** — **EXECUTED 2026-08-14.** Opt-in overlay
+   `docker-compose.cluster.yml`: vertx-infinispan (pinned to the Infinispan 14
+   jakarta line; 15 hides an API vertx needs, 13 is javax), JGroups TCPPING on an
+   internal-only network with fully static addressing — the services sit on two
+   networks, so interface guessing and DNS can disagree; static cluster-net IPs pin
+   membership (:7800), discovery, AND the event-bus message transport
+   (`quarkus.vertx.cluster.host`/`:15701` — a separate socket whose localhost
+   default silently drops every remote delivery). Bus members run as JVM containers
+   (the documented native fallback). *Gate met: 2-node view forms; create→export in
+   329 ms against a 30 s poll interval; exporter killed mid-stream missed nothing
+   (recovered at the first tick, exactly once).*
+7. **CI + runbook** — **EXECUTED 2026-08-14** (CI gate lands with the next push).
+   `ClusteredBusTest` — two clustered Vert.x nodes over loopback, same stack as the
+   overlay — runs inside plain `mvn verify`, so CI exercises the clustered fabric
+   on every build. RUNBOOK gains the events/cluster section: ports, split-brain
+   symptoms, "a consumer is just a cursor" recovery. NOTE for the eventual push:
+   `inventory-exporter` must be added to the `SUBMODULE_TOKEN` fine-grained PAT's
+   repository list or CI checkout will fail.
 
 ## Risks and open unknowns
 

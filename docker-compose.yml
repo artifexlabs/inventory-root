@@ -66,6 +66,27 @@ services:
     ports:
       - "8081:8081"
 
+  # Reference event consumer (VERTICLES.md stage 5): polls the audit_events
+  # cursor — fully correct with no bus. The clustered-bus override
+  # (docker-compose.cluster.yml) upgrades it to sub-second push.
+  inventory-exporter:
+    build:
+      context: inventory-exporter
+      dockerfile: src/main/docker/Dockerfile.native
+    image: inventory-exporter:native
+    environment:
+      QUARKUS_DATASOURCE_REACTIVE_URL: postgresql://postgres:5432/inventory
+      QUARKUS_DATASOURCE_USERNAME: inventory
+      QUARKUS_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-inventory}
+      QUARKUS_DEVSERVICES_ENABLED: "false"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    ports:
+      - "8083:8083"
+
   inventory-web-app:
     build:
       context: inventory-web-app
