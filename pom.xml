@@ -17,5 +17,6 @@
          The submodule and its history remain; tagged before-remove-inventory-server. -->
     <module>inventory-web-api</module>
     <module>inventory-web-app</module>
+    <module>inventory-exporter</module>
   </modules>
 </project>

@@ -19,3 +19,6 @@
 [submodule "inventory-mobile-apps"]
 	path = inventory-mobile-apps
 	url = git@github.com:mykelalvis/inventory-mobile-apps.git
+[submodule "inventory-exporter"]
+	path = inventory-exporter
+	url = git@github.com:mykelalvis/inventory-exporter.git
