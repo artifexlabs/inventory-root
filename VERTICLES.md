@@ -1,21 +1,10 @@
 # Verticles and the Event Bus
 
-*Decision recorded 2026-08-14. This documents intent and a staged plan; no stage has
-executed yet. Companion to [PLAN.md](PLAN.md) (whose Architecture/Topology bullets and
-module table will need updating when the consolidation stage executes) and
-[RUNBOOK.md](RUNBOOK.md).*
-
-> **SUPERSEDED IN PART (migrate_to_vertx_eb, 2026-08-14).** By owner decision, the
-> topology moved beyond this document's "facts only" stance: `inventory-server` is
-> restored as the bus worker host, and ALL domain work (CRUD, audit reads, QR/label,
-> users, tokens, authentication) now crosses the clustered Vert.x bus as
-> request/reply **envelopes** (`inventory.svc.*`, package
-> `org.lawfulevil.inventory.api.bus`) carrying the acting user, asserted roles, and
-> a shared fabric token; `inventory-web-api` is the authenticated HTTP gateway.
-> External inputs are authenticated at the gateway; services on the bus are
-> considered already authenticated. The fact stream (`inventory.events.*`), the
-> audit table as durable log, and the consumer catch-up protocol below remain
-> exactly as decided. See [DEPLOYMENT.md](DEPLOYMENT.md).
+*Decision recorded 2026-08-14; all seven stages EXECUTED the same day, then REVISED
+the same day by the `migrate_to_vertx_eb` work (see "The decision" below — the bus
+gained a second plane and `inventory-server` came back as its worker host). This
+document now describes the architecture as built. Companion to [PLAN.md](PLAN.md),
+[DEPLOYMENT.md](DEPLOYMENT.md) (how to run it), and [RUNBOOK.md](RUNBOOK.md).*
 
 ## The question
 
@@ -26,24 +15,48 @@ possibly the existing request traffic) crossing the clustered Vert.x event bus?
 
 ## The decision
 
-**One HTTP domain service + a bus that carries only facts.**
+**One authenticated HTTP gateway + a bus with two planes.**
 
-- **`inventory-web-api` becomes the single HTTP service**: REST surface, OpenAPI,
-  OIDC exchange, the DAOs (`inventory-impl`), transactions, and the audit writes all
-  live there. The `inventory-server` module is parked — not run as a process, not
-  kept as a placeholder. (Everything is tagged `before-remove-inventory-server`.)
+*(Revised 2026-08-14. The original decision was "one HTTP domain service + a bus that
+carries only facts," with `inventory-server` parked. The owner then directed that ALL
+domain work cross the bus; the fact plane, the audit log, and the catch-up protocol
+survived that revision untouched — only the topology and the request path changed.)*
+
+- **`inventory-web-api` is the authenticated HTTP gateway**: REST surface, OpenAPI,
+  the OIDC exchange, and — decisively — the authentication boundary. Every external
+  input (browser, iOS) is authenticated here and nowhere else. It owns no domain
+  state in deployment.
+- **`inventory-server` is the bus worker host**: the DAOs (`inventory-impl`),
+  transactions, audit writes, label/QR rendering, and user/token administration run
+  in its verticles. (It was parked by stage 4 and restored by the revision; the
+  parking tag `before-remove-inventory-server` still marks that moment.)
 - **North-south request/response stays HTTP.** Browser → web-app → web-api and
-  iOS → web-api are unchanged in kind.
-- **The clustered Vert.x event bus carries after-commit domain events only** —
-  announcements of what already happened, payload-identical to the audit trail.
+  iOS → web-api are unchanged in kind — the reasoning under "why north-south stays
+  HTTP" below is still exactly why.
+- **The clustered Vert.x event bus carries two distinct kinds of traffic:**
+  1. **Request/reply envelopes** on `inventory.svc.*` — the work itself. A
+     `BusEnvelope` (package `org.lawfulevil.inventory.api.bus`) names the action and
+     its target, carries a typed payload, and binds the request to the acting user:
+     their id and principal for attribution, their asserted roles, and the shared
+     fabric token. Workers refuse a bad token (401) or a missing role (403) before
+     touching the domain.
+  2. **After-commit facts** on `inventory.events.*` — publish-only announcements of
+     what already happened, payload-identical to the audit trail. Unchanged from the
+     original decision.
 - **The `audit_events` table is the durable log of record.** It is already written in
   the same Postgres transaction as every mutation, which makes it a transactional
-  outbox we get for free. Consumers replay/catch-up from it; the bus is a latency
-  optimization, never a correctness dependency.
-- **No hub service, no broker.** The Vert.x bus is peer-to-peer. If consumer needs
+  outbox we get for free. Consumers replay/catch-up from it; the fact plane is a
+  latency optimization, never a correctness dependency.
+- **No hub service, no broker.** The Vert.x bus stays peer-to-peer: `inventory-server`
+  is a *service host* whose workers own the domain, NOT a relay that messages pass
+  through — the "clearing house" rejected below is still rejected. If consumer needs
   ever exceed what a Postgres cursor sustains (or cross-datacenter fan-out appears),
   the escape hatch is a real broker (Kafka/NATS) — a deliberate future decision, not
   this one.
+- **Trust boundary**: external inputs authenticate at the gateway; anything already
+  on the bus is considered authenticated, because cluster membership *is* access
+  (see the security model below — the fabric token is defense in depth, not the
+  perimeter).
 
 The minimum viable consumer is therefore: a Quarkus service with a Postgres
 connection, polling a cursor. Joining the bus upgrades it from poll-interval latency
@@ -51,26 +64,40 @@ to sub-second push. That is what makes "arbitrary number of services" cheap.
 
 ## Why not the alternatives
 
-**Bus request-reply for web-app → web-api (→ domain) traffic.** Those hops carry HTTP
-semantics the bus cannot: status codes the UI branches on, content types
-(`image/png` QRs, raw label bytes), and streamed asset upload/download (bus messages
-are fully buffered in memory). The iOS app can never join a Vert.x cluster, so the
-HTTP surface must exist anyway; OIDC and sessions are HTTP-shaped; and cluster
-membership would become an availability dependency for every page load. Request-reply
-over the bus is just RPC on a worse transport for this shape of traffic.
+**Why north-south stays HTTP** (i.e. bus request-reply for browser → web-app →
+web-api traffic — still rejected). Those hops carry HTTP semantics the bus cannot:
+status codes the UI branches on, content types (`image/png` QRs, raw label bytes),
+and streamed asset upload/download (bus messages are fully buffered in memory). The
+iOS app can never join a Vert.x cluster, so the HTTP surface must exist anyway; OIDC
+and sessions are HTTP-shaped; and cluster membership would become an availability
+dependency for every page load.
+
+*Scope note (2026-08-14 revision):* this argument is about the **edge**, and it still
+holds — which is why the gateway exists at all. It does NOT apply to the
+gateway → worker hop now on the bus: that hop is server-to-server between trusted
+cluster members, needs no browser semantics, and deliberately accepts cluster
+membership as an availability dependency (no workers, no API). Binary payloads that
+do cross it — QR PNGs, asset bytes — ride base64 inside the envelope, accepted for
+photo-sized data and called out as a known constraint.
 
 **`inventory-server` as an event "clearing house."** The clustered bus has no center:
 members connect peer-to-peer and messages flow producer→consumer directly. A hub JVM
 would add a hop and a single point of failure while re-implementing, badly, what the
 transport already does (or what a broker would do properly).
 
-**Commands over the bus** (mutations entering the system as events). Callers need the
-synchronous answer — the created item, its ID, or the constraint violation. The bus
-is at-most-once, so a dropped message is a silently lost write. And the repo's core
-invariant — the audit row commits in the same transaction as the change — dies when
-the change happens in a consumer detached from the request. Events are **facts, not
-commands**: the mutation happens synchronously over HTTP; the fact is published after
-commit.
+**Commands as published events** (mutations entering the system as fire-and-forget
+announcements). Callers need the synchronous answer — the created item, its ID, or
+the constraint violation. Publish is at-most-once with no reply, so a dropped message
+is a silently lost write. And the repo's core invariant — the audit row commits in
+the same transaction as the change — dies when the change happens in a consumer
+detached from the request.
+
+*This is precisely why the revision used **request/reply**, not publish, for domain
+work:* the caller blocks for a real answer (including HTTP-aligned failure codes), a
+lost message surfaces as a timeout rather than a phantom success, and the worker runs
+the whole mutation — audit row included — in one transaction on the far side. The
+`inventory.events.*` plane keeps its original discipline: **facts, not commands**,
+published only after commit.
 
 **A token-generation service to gate bus access.** The bus has no checkpoint where a
 token could be enforced — membership *is* access: any cluster member can publish to
@@ -84,11 +111,17 @@ door is cost without function.
 | Option | Verdict |
 |---|---|
 | Status quo (HTTP only, no events) | Every new consumer is bespoke polling/scraping; no push; rejected as the N-consumer story |
-| **One HTTP tier + bus facts + audit replay (chosen)** | Durable log already exists in-tx; consumers correct even while down; bus optional per consumer; no new stateful infra |
-| Bus everywhere, incl. request-reply | Loses HTTP semantics/streaming; iOS excluded; cluster gates page loads; big rewrite solving no current problem |
+| One HTTP tier + bus facts + audit replay | *Originally chosen 2026-08-14 and executed (stages 1–7).* Durable log already exists in-tx; consumers correct even while down; bus optional per consumer; no new stateful infra — all still true, and all retained below |
+| **Authenticated HTTP edge + bus request/reply for domain work + the same fact plane (chosen, 2026-08-14 revision)** | Keeps every property of the row above, and makes the bus the integration surface: a new trusted service speaks envelopes instead of re-implementing a client. Costs accepted: cluster membership becomes an availability dependency for the API, binary payloads ride base64, and identity on the bus is asserted rather than re-verified (membership is the boundary) |
+| Bus everywhere, INCLUDING the browser edge | Loses HTTP semantics/streaming; iOS excluded; cluster gates page loads — still rejected; the gateway exists for exactly this reason |
 | Broker (Kafka/NATS) | Real replay/consumer groups, but new stateful infra duplicating what `audit_events` provides at this scale; revisit on outgrowth |
 
 ## Event contract
+
+*This section covers the FACT plane only. Its sibling — the request/reply envelope
+contract — lives in `org.lawfulevil.inventory.api.bus` (`BusEnvelope`, `BusActions`
+with its action→address→role registry, `Roles`, and the typed payload interfaces),
+documented in that package's `package-info.java`.*
 
 Package `org.lawfulevil.inventory.api.events` (new, in `inventory-api`):
 
@@ -143,10 +176,29 @@ need a relay/CDC daemon that the catch-up protocol makes unnecessary.
 - Semi-trusted integrations never join the cluster. They speak HTTPS to web-api with
   existing bearer tokens (issue/revoke via `TokenService`, managed in the admin UI).
   Trust level picks the surface.
-- Bus payloads are data. They already flow to the audit UI, so they carry no secrets;
-  keep it that way.
+- **Fact-plane payloads are data.** They already flow to the audit UI, so they carry
+  no secrets; keep it that way.
+- **Envelope-plane payloads are NOT all inert** *(2026-08-14 revision)*: every
+  envelope carries the shared fabric token, and the pre-auth `auth.login`/
+  `auth.exchange` actions carry credentials and the exchange claim. This is
+  acceptable only because the cluster network is private and internal-only — it is
+  the concrete reason ports 7800/15701 must never be published, and the reason
+  JGroups transport encryption is the right next hardening step if the cluster ever
+  spans hosts.
+- **Identity on the bus is asserted, not re-verified.** A worker checks the fabric
+  token and the envelope's roles against the action's requirement; it does not
+  re-authenticate the named user — that happened at the gateway. Any cluster member
+  can therefore speak as any user, which is the direct consequence of "membership is
+  trust." The envelope is immutable once built (payload deep-copied at every
+  boundary) so an admitted request cannot be altered in flight.
 
 ## Staged plan (each stage gated; everything off by default)
+
+*Historical record of how this was rolled out on 2026-08-14, kept as written. Two
+stages were revised later the same day by `migrate_to_vertx_eb` — noted inline. Note
+that "off by default" describes the rollout: in deployment today the bus is
+mandatory (no workers, no API), while `inventory.events.bus` still defaults to
+`none` in a bare checkout.*
 
 1. **Contract + no-op wiring** — **EXECUTED 2026-08-14.** `events` package in
    `inventory-api` (`EventPublisher` with `NOOP` + `announce`/`announceAll`,
@@ -173,6 +225,10 @@ need a relay/CDC daemon that the catch-up protocol makes unnecessary.
    compose; repo + history remain, tagged `before-remove-inventory-server`).
    *Gate: 49 web-api tests green (all migrated domain tests incl. Pg/Testcontainers
    + rewritten views tests) and the full-workspace verify + dev-mode smoke below.*
+   **REVISED same day:** `inventory-server` was un-parked as the bus worker host and
+   the domain beans moved back into it; web-api kept the REST surface and became the
+   authenticated gateway, retaining its own producer copy solely for embedded
+   (single-process dev/test) mode.
 5. **Reference consumer: `inventory-exporter`** — **EXECUTED 2026-08-14.** New
    module/repo (:8083): `ExportLoop` drains `audit_events.seq` from a durable
    cursor; `item.*`/`label.print` land in `exports` exactly once (event-id PK);
@@ -190,6 +246,11 @@ need a relay/CDC daemon that the catch-up protocol makes unnecessary.
    (the documented native fallback). *Gate met: 2-node view forms; create→export in
    329 ms against a 30 s poll interval; exporter killed mid-stream missed nothing
    (recovered at the first tick, exactly once).*
+   **REVISED same day:** with the bus mandatory rather than opt-in, the overlay was
+   merged into `docker-compose.yml` and deleted — the base stack now runs a
+   three-member cluster (gateway .11, server .12, exporter .13) on the same
+   internal-only static-IP network. `docker-compose.release.yml` (versioned GHCR
+   images) is the only overlay today; see [DEPLOYMENT.md](DEPLOYMENT.md).
 7. **CI + runbook** — **EXECUTED 2026-08-14** (CI gate lands with the next push).
    `ClusteredBusTest` — two clustered Vert.x nodes over loopback, same stack as the
    overlay — runs inside plain `mvn verify`, so CI exercises the clustered fabric
@@ -209,6 +270,19 @@ need a relay/CDC daemon that the catch-up protocol makes unnecessary.
   javadoc, enforced in the exporter's tests.
 - **Memory mode never supports cross-process consumers** (per-JVM state, no durable
   log) — pg mode only, matching the existing constraint.
-- **Consolidation ripples**: PLAN.md's topology/module-responsibility text, RUNBOOK,
-  compose, devcontainer, and CI all reference `inventory-server`; stage 4 carries a
-  documentation sweep.
+- ~~**Consolidation ripples**~~ — swept twice (stage 4, then the revision): PLAN.md,
+  RUNBOOK, compose, and the Justfile now describe the gateway + worker topology, and
+  [DEPLOYMENT.md](DEPLOYMENT.md) is the deploy method of record.
+- **The bus is now an availability dependency for the API** *(revision)*: with
+  workers remote, a partition means gateway requests fail 503 — request/reply has no
+  store-and-forward. Deliberate: the alternative was a gateway that silently accepts
+  work it cannot do. The fact plane keeps its old property (partitions lose nothing;
+  consumers reconcile from the table).
+- **Envelope payloads are fully buffered** *(revision)*: asset bytes and QR PNGs
+  cross base64 inside the envelope. Fine for photo-sized data; a large-file feature
+  would need a side channel (object store URL in the envelope) rather than bigger
+  messages.
+- **Two producer copies** *(revision)*: `InventoryBackendProducer` exists in both
+  `inventory-server` and `inventory-web-api` (the latter only for embedded
+  single-process mode). They must stay in step — a printer or storage option added
+  to one belongs in the other.
