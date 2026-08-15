@@ -191,6 +191,17 @@ need a relay/CDC daemon that the catch-up protocol makes unnecessary.
   can therefore speak as any user, which is the direct consequence of "membership is
   trust." The envelope is immutable once built (payload deep-copied at every
   boundary) so an admitted request cannot be altered in flight.
+- **Roles are DERIVED, not managed.** There is no role storage anywhere. The
+  vocabulary is three constants — `inventory.read`, `inventory.write`,
+  `inventory.admin` — and `Roles.rolesFor(user)` maps a user to them from the single
+  `InventoryUser.isAdmin()` boolean: every authenticated user reads and writes,
+  admins additionally administer. So "managing roles" today means toggling the admin
+  flag (`users.set-admin`); there is no way to grant read-only access or revoke write
+  without code. **Enforcement is real** (every action declares its required role in
+  `BusActions`; `BusGuard` refuses with 403 before any work) — it is only the
+  *assignment* side that is a single flag. `rolesFor` is deliberately the one seam:
+  real role management would add a `user_roles` table and read it there (plus grant/
+  revoke actions), and neither the workers nor the action→role registry would change.
 
 ## Staged plan (each stage gated; everything off by default)
 
@@ -286,3 +297,11 @@ mandatory (no workers, no API), while `inventory.events.bus` still defaults to
   `inventory-server` and `inventory-web-api` (the latter only for embedded
   single-process mode). They must stay in step — a printer or storage option added
   to one belongs in the other.
+- **Role granularity is a single boolean** *(revision; see the security model)*: the
+  bus enforces three roles rigorously, but every user gets read+write and only the
+  admin flag varies. A read-only or per-location role needs stored roles behind
+  `Roles.rolesFor` — cheap to add, but it is NOT there today, so do not read the
+  role checks as evidence of fine-grained authorization.
+- **The fabric token is a single shared secret** with no rotation story beyond
+  redeploying gateway and workers together (`INVENTORY_BUS_TOKEN`). Acceptable while
+  membership is the real boundary; revisit alongside JGroups transport encryption.
