@@ -28,12 +28,21 @@ eventually — iOS/Android clients.
 | Formal releases | **Tag-driven CI releases; container images to private GHCR under the `inventory-root` namespace; mobile releases on separate tracks** *(decided 2026-08-14)* | Images are the target artifact for all non-mobile code — the apps embed the libraries, every consumer builds from source in the one reactor, so no Maven artifact repository is needed (revisit only if an external build ever consumes the jars). One version for the whole platform: a `vX.Y.Z` tag on the superproject releases everything together, sidestepping the multi-repo ordering problem that breaks `maven-release-plugin` (one SCM per reactor is assumed; we have seven). All images publish to **private GHCR under `ghcr.io/<owner>/inventory-root/<module>`** — grouped in one place, each keeping its own name. `develop` stays SNAPSHOT forever; release versions exist only at tags (CI-friendly `${revision}` + flatten). iOS (and later Android) release through store channels (TestFlight/App Store, Play Console) with their own versioning and signing — deliberately not part of the image pipeline. |
 | Label/QR rendering in native | **`quarkus-awt`** *(revised 2026-08-06; supersedes the pure-PNG-encoder decision of 2026-08-05)* | Labels will compose text and possibly other images alongside the QR — that is real Java2D (`Graphics2D`, fonts), which a bare PNG encoder cannot do. quarkus-awt makes AWT work in native images with Quarkus maintaining the metadata. Costs accepted: native images are Linux-only (the deploy target is Linux containers anyway) and the container image must carry fonts + fontconfig. macOS development is unaffected — headless AWT works fully on the JVM, so all dev and tests run on the Mac; native verification happens by container-building and container-running. If labels ever turn out to be QR-only after all, the pure-JDK 1-bit PNG encoder over zxing's `BitMatrix` remains the recorded simplification option. |
 
-## Decision needed SOON — Locations vs. unified containment *(raised 2026-08-14; decide before inventory is widespread)*
+## DECIDED 2026-08-15 — unified containment *(raised 2026-08-14; decided before any real data existed)*
 
-**The question**: keep `Location` as a separate concept, or drop it in favor of
-containers-with-coordinates — one physical hierarchy where a "location" is just a
-root container (house → room → shelf → box), and an item's effective coordinates
-are inherited from the nearest ancestor container that has a pin.
+**The decision (owner, 2026-08-15): collapse `Location` into containment.** A location
+is just another container that happens to have coordinates. Any item without its own
+coordinates **inherits them from its container**, transitively. **Multi-membership is
+dropped** — "it doesn't map to reality": a physical thing is in exactly one place, so
+containment becomes a tree (single optional parent), and `moveToContainer` semantics
+become the only way to change placement. Executed as **Phase 15** (fourteenth
+milestone, below), bundled with the field additions and a schema collapse — the
+window where no data is deployed is exactly when this is free.
+
+**The question, as originally framed**: keep `Location` as a separate concept, or drop
+it in favor of containers-with-coordinates — one physical hierarchy where a "location"
+is just a root container (house → room → shelf → box), and an item's effective
+coordinates are inherited from the nearest ancestor container that has a pin.
 
 **Why it must be decided early**: the migration converts every `Location` row into
 a root container item and every `items.location_id` reference into a containment
@@ -360,6 +369,21 @@ rather than an emergency patch.
   AAB). Store review cycles, signing chains, and versioning have nothing in common
   with image publishing — forcing them into one pipeline would couple a `git tag`
   to human review timelines. Each gets its own phase when distribution starts.
+
+### Phase 15 — Unified containment + item enrichment *(fourteenth milestone — detail below; added 2026-08-15)*
+- **Locations collapse into containment**: a location is a container with
+  coordinates. Single optional parent per item (a tree, NOT a DAG — multi-membership
+  is dropped as unphysical); coordinates inherit from the nearest ancestor that has
+  them. `Location`/`LocationSystem` retire as separate concepts.
+- **Item enrichment**: `heavy` flag (ongoing #4), key/value `tags` (ongoing #5),
+  optional `expiration` with an "absolute, not a recommendation" flag.
+- **Asset lifecycle**: arbitrary file types with `attachedAt`/`updatedAt`, and
+  **replace-with-archival** — the superseded bytes ride the audit event so nothing
+  is ever silently lost.
+- **Labels** gain a HEAVY mark and the expiration date.
+- **UI** gains editing for every new field.
+- **Schema collapses** to a minimal changeset set — no data is deployed, so the
+  13-changeset accretion is rewritten as the schema it should have been.
 
 ## First milestone (Phase 1, implementable detail)
 
@@ -998,6 +1022,73 @@ SNAPSHOT forever. Not yet executed.*
 releases, and any Maven artifact publishing (only if an external consumer ever
 needs the jars; GitHub Packages is the answer then).
 
+## Fourteenth milestone (Phase 15: unified containment + item enrichment) — EXECUTED 2026-08-15
+
+*Added 2026-08-15 on owner decision. Executed the same day on branch
+`unified_containment_b4_v1` across api/impl/server/web-api/web-app/exporter
+(mobile follows once contracts settle). All gates met: full reactor green (193
+tests); re-parent-not-multiply and cycle-refusal proven in memory, Postgres
+(recursive CTE), the HTTP surface, and the web-app stub; coordinate inheritance
+across a three-deep chain in both backends; asset-replace recovery of archived
+bytes from the audit event; heavy/expiry label ink pinned. NOTE: the iOS app
+still speaks the OLD surface (locationId, /containers) and needs its own pass.*
+
+**Why now**: every part of this is cheap exactly once — before real inventory exists.
+The containment change rewrites every item's placement, and the schema collapse is
+only honest while no deployment has run Liquibase in anger.
+
+1. **Schema collapse.** The 13 accreted changesets (`001-locations` … `013-audit-seq`)
+   are replaced by a minimal set expressing the END state directly — no data exists,
+   so there is nothing to migrate and no reason to preserve the archaeology:
+   - `001-core.yaml` — `items` (now carrying `container_id` self-FK, `latitude`/
+     `longitude`, `heavy`, `expires_at`, `expiration_absolute`, par values inline)
+     and `item_tags`.
+   - `002-assets.yaml` — `assets` (with `attached_at`/`updated_at`) and
+     `asset_regions`.
+   - `003-identity.yaml` — `users`, `api_tokens`, `user_identities`.
+   - `004-audit.yaml` — `audit_events` with its `seq` identity column.
+   The `locations` table and the `item_containment` join table are GONE. Tests that
+   named old changesets are adjusted; the Testcontainers fixtures run the new
+   changelog unchanged in shape.
+2. **Containment as a tree.** `Item` gains `getContainerId()` (single optional
+   parent) and loses `getLocationId()`. `addToContainer` becomes a move (an item
+   already contained is re-parented, not multiplied); `getContainersOf` collapses to
+   "the container, if any". Cycle prevention is enforced on the write path — an item
+   may not become its own ancestor.
+3. **Coordinate inheritance.** `Item` gains its own optional `coordinates`;
+   `effectiveCoordinates(item)` walks up the container chain and returns the nearest
+   ancestor's pin. A "location" is simply a container with coordinates and,
+   conventionally, `type=location` — no separate table, no separate service.
+4. **Item enrichment.** `heavy` boolean (a human judgment, NOT derived from
+   `weightGrams`); `tags` as ordered key/value pairs where the value is optional
+   (`scuba` renders bare, `color=orange` renders with its value), searchable by
+   existence, glob, or regex; `expiration` as `{instant, absolute}` where absolute
+   means "hard stop, not a recommendation".
+5. **Asset lifecycle.** Any content type. `attachedAt` fixed at first attach;
+   `updatedAt` defaults to it and moves on replace. **Replace archives**
+   *(revised 2026-08-15)*: the superseded asset's bytes + metadata land in the
+   `asset_archive` table in the same transaction, and the `asset.replace` audit
+   event carries an `archiveId` reference — never the bytes, because
+   `audit_events` is the replay feed every bus consumer pages, and multi-MB
+   base64 jsonb rows there would tax every replay forever. Archives carry no
+   foreign keys: history survives deletion of the asset it once was. (Asset
+   BYTES stay in Postgres bytea — decided 2026-08-15: transactional with the
+   audit row, one-artifact backup, stateless-except-Postgres deployment; the
+   escape hatch if files outgrow photos is an object store behind the
+   AssetStore seam, never the bare filesystem.)
+6. **Labels.** Both die-cut layouts gain a `** HEAVY **` mark when the item is heavy
+   and an `Expires <date>` line (marked `!` when absolute). The Brother tape layout
+   gains the heavy mark only — there is no room for more.
+7. **UI.** The item edit page gains: container picker (single-select, excluding
+   descendants), coordinates, heavy checkbox, tag editor (add/remove key=value), and
+   expiration date + absolute checkbox. Item views surface effective coordinates with
+   an indicator when inherited rather than owned.
+
+*Gates: full reactor green; a containment test proving re-parenting rather than
+multi-membership and rejecting cycles; a coordinate-inheritance test across a
+three-deep chain; an asset-replace test asserting the old bytes are recoverable from
+the audit event; golden-file/ink tests for the label additions.*
+
 ## Label pipeline and printer testing
 
 *Added 2026-08-06. The label path decomposes into four stages; the first three are fully
@@ -1048,10 +1139,9 @@ the native/Linux constraint applies only to the shipped binary, never to develop
 
 ## Open unknowns (tracked, not blocking)
 
-- **Locations vs. unified containment** — see the "Decision needed SOON" section
-  at the top of this plan. Unlike the rest of this list it IS time-sensitive: the
-  migration cost compounds with data volume and client count, so it should be
-  decided before inventory is widespread.
+- ~~**Locations vs. unified containment**~~ — DECIDED 2026-08-15 in favor of unified
+  containment (single-parent tree, inherited coordinates); executing as Phase 15.
+  Decided while zero real data existed, which is what made it free.
 - ~~iOS/Android app stack~~ — both decided 2026-08-09 with compiling skeletons:
   native SwiftUI universal (iOS, Phase 12) and native Kotlin + Jetpack Compose
   (Android, its own phase). Remaining open: mobile app timeline/scope beyond the
@@ -1092,22 +1182,22 @@ containment model (1) is the foundation that makes picture-locations (2) and
 map-drawn locations (3) fall out of the Phase 8 region machinery almost for
 free. Item 4 is standalone.
 
-- [ ] **1. Location as a container type** — model a location as a type of
+- [x] **1. Location as a container type** *(DONE — Phase 15, 2026-08-15)* — model a location as a type of
       container, unifying the "what holds what" hierarchy (items in containers in
       locations) under one containment model. *Foundation for 2 and 3.*
-- [ ] **2. Picture-as-location** — upload a picture that IS a location (not just
+- [ ] **2. Picture-as-location** *(UNBLOCKED by Phase 15: a location is now just a container)* — upload a picture that IS a location (not just
       an asset attached to an item), which can then hold containers. *Builds
       on 1.*
-- [ ] **3. "Map" asset type** — an asset kind on which boxes are drawn (same
+- [ ] **3. "Map" asset type** *(UNBLOCKED by Phase 15)* — an asset kind on which boxes are drawn (same
       annotator mechanics as Phase 8) but the boxes become LOCATIONS rather than
       items — e.g. a floor plan or garage photo marking out named places.
       *Builds on 1; pairs naturally with 2. `makeItemFromRegion` gains a
       location-flavored sibling.*
-- [ ] **4. "Heavy" flag on items** — a checkbox data element denoting an item is
+- [x] **4. "Heavy" flag on items** *(DONE — Phase 15, 2026-08-15)* — a checkbox data element denoting an item is
       difficult to move. Does NOT replace weight (`weightGrams` stays); this is a
       human judgment ("two-person lift", "don't bother relocating"), not a
       measurement. *Standalone; can land any time.*
-- [ ] **5. Add tags to things** - a tag is a metadata markup on an object
+- [x] **5. Add tags to things** *(DONE — Phase 15, 2026-08-15)* - a tag is a metadata markup on an object
       that may or may not have an associated value.  For instance, there might
       be a tag called "scuba" and there might be a tag called "color" with
       the value "orange".  The first would be rendered as "scuba" and the second
