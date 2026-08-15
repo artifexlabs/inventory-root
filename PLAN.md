@@ -800,9 +800,14 @@ caveats note; the milestone is functionally closed.*
    invariants only until the goldens are generated inside the devcontainer
    (Linux/DejaVu fonts, same `-Dlabel.golden.update=true` flow as the Brother
    layout); (b) RESOLVED 2026-08-14 — the `standard` format printed on hardware
-   via the `?format=standard` override (on the loaded LARGE stock: layout lands
-   in the top 1.25 in and gap sensing feeds the full 4-in label — re-verify
-   registration whenever standard stock is actually loaded); (c) RESOLVED
+   via the `?format=standard` override. The first print exposed two defects,
+   both fixed and re-verified on hardware the same day (owner: "Perfect"):
+   the fixed-canvas layout redesign (1-in QR; the full id split across two
+   mono lines — a ULID must never truncate; type/qty, location, printed-on
+   date; a right-edge-stays-white test pins against clipping) and `^LL`
+   anchoring the firmware's length tracking (three blank labels fed without
+   it). Printed on the loaded LARGE stock — re-verify registration whenever
+   standard stock is actually loaded; (c) RESOLVED
    2026-08-14 — the `large` field set now includes the location name:
    `ZebraPrinter.withLocationLookup(...)` (wired from LocationSystem in both
    producers) resolves the item's locationId best-effort — a failed lookup
