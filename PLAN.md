@@ -759,8 +759,8 @@ captured job verified byte-for-byte (100-byte invalidate + ESC@ … 0x1A; 9384 b
 observed). The full Phase 7 curl smoke also passes on the new image, and a bonus
 check exercised Phase 8 against native+pg: asset upload with explicit `?lat&long`
 (coordinates stored), bare region, make-item promotion, link readback — all green.
-Steps 1–5 are now COMPLETE; remaining in this milestone: step 6 only (Zebra GK420t,
-arriving ~2026-08-13).*
+Steps 1–5 are now COMPLETE. Step 6 (Zebra GK420t) EXECUTED 2026-08-14 — see its
+caveats note; the milestone is functionally closed.*
 
 1. **`inventory-impl`** — the pipeline stages as plain classes (CDI-light, like the
    other impl code):
@@ -793,7 +793,18 @@ arriving ~2026-08-13).*
    phone-scan the printed QR — it must resolve through `/i/{id}` to the item page.
    First physical gate: an ~18 mm QR from 24 mm tape scans reliably; if not, iterate
    module size/quiet zone in the composer before anything else.
-6. **Zebra GK420t extension** (on arrival, ~2026-08-13): `ZplEncoder` (stage 2, the
+6. **Zebra GK420t extension** — **EXECUTED 2026-08-14** (built the same day as the
+   bench verification below; one hardware print through the full bus path returned
+   204 with an attributed `label.print` audit row). Remaining caveats, deliberately
+   open: (a) golden-file pinning of the two die-cut layouts is ink-region
+   invariants only until the goldens are generated inside the devcontainer
+   (Linux/DejaVu fonts, same `-Dlabel.golden.update=true` flow as the Brother
+   layout); (b) the `standard` format has passed only the fake-printer path — no
+   hardware print until standard stock is loaded (print discipline applies);
+   (c) the `large` field set was finalized WITHOUT location name (the printer has
+   no LocationSystem access; add it only if a location lookup ever moves into the
+   labels worker). Original step text follows.
+   `ZplEncoder` (stage 2, the
    reference dialect — `^GFA` graphic field from the same 1-bit bitmap, eyeballable
    via Labelary during development) and `inventory.printer=zebra-gk420t` wiring.
    Connectivity DECIDED 2026-08-12: **Ethernet initially** — reuses
