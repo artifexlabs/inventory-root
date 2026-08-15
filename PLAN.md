@@ -1302,7 +1302,19 @@ free. Item 4 is standalone.
       than physical items, although the physical object that contains the data would
       definitely need to be called out as a physical item.  This is already started with
       DataInfo
-- [ ] **7. Physical identifiers: QR, UPC, and NFC tags** - We should lookup default
+- [x] **7. Physical identifiers: QR, UPC, and NFC tags** *(CORE DONE 2026-08-15
+      — the identity mapping, exactly the shape below: `ItemIdentity(kind, value)`
+      record (kind lowercased, both trimmed), changeset `005-item-identities`
+      (PK `(kind, value)`, FK cascade, item index), four InventorySystem
+      methods in both backends (claim is idempotent per item, refuses a marker
+      already claiming a DIFFERENT item — Pg claims atomically via INSERT ON
+      CONFLICT DO NOTHING then explains), audit `item.identity-add/-remove`,
+      four `items.identity-*`/`items.find-by-identity`/`items.identities-of`
+      bus actions, and gateway routes `PUT/GET /items/{id}/identities`,
+      `DELETE /items/{id}/identities/{kind}/{value}`, `GET /items/by-identity`
+      (409 on marker reuse). REMAINS OPEN: the external UPC catalog lookup to
+      prefill metadata — deliberately deferred; needs a catalog-source
+      decision.)* - We should lookup default
       information about items that we add by scanning UPC codes or perhaps some sort of
       QR code. *(NFC assessed and folded in 2026-08-14.)* All of these are one problem
       underneath — a physical marker resolving to an item — so build ONE
