@@ -1377,3 +1377,17 @@ free. Item 4 is standalone.
       printed thing.*
 - [ ] **13. Geospatial hooks** - The system could produce notifications (or generate an ios reminder)
       for when you get near an item that needs to be examined (like for freshness or inventory)
+- [ ] **14. "x-large" Zebra label format** *(added 2026-08-15)* - a third named format
+      beyond `standard` and `large`: a LARGER QR code and MORE data fields.
+      The GK420t is a 4-inch (203 dpi) printer, so x-large means real 4-inch-wide
+      die-cut stock — e.g. 4×6 in (~813×1218 dots), shipping-label size — where the
+      QR can go ~3 in (room-distance scanning with margin) and the field stack can
+      carry everything the item knows: name, full id, type, quantity, container
+      name, coordinates, tags, heavy/expiry marks, description, printed-on date.
+      The composer already owns formats as pure layout functions and the encoders
+      are format-agnostic, so this is one new geometry + `inventory.printer.format=x-large`
+      + `?format=x-large` riding the existing selection plumbing, plus golden-file
+      pinning like the other two. Blocked on ordering the wider die-cut stock;
+      exact field set finalized at implementation against real items (same rule
+      as `large`). Print discipline applies: verify via goldens/Labelary first,
+      hardware print only on explicit instruction.
