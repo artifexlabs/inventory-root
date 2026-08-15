@@ -75,12 +75,13 @@ services:
       INVENTORY_ADMIN_PASSWORD: ${INVENTORY_ADMIN_PASSWORD:-change-me}
       # after-commit domain facts keep flowing to consumers (exporter)
       INVENTORY_EVENTS_BUS: clustered
-      # Label printer (Phase 9): defaults to the log printer; set
-      # INVENTORY_PRINTER=brother-p750w + INVENTORY_PRINTER_HOST in .env for hardware.
+      # Label printer (Phase 9): defaults to the log printer; .env selects
+      # hardware (brother-p750w uses tape-mm; zebra-gk420t uses format).
       INVENTORY_PRINTER: ${INVENTORY_PRINTER:-log}
       INVENTORY_PRINTER_HOST: ${INVENTORY_PRINTER_HOST:-}
       INVENTORY_PRINTER_PORT: ${INVENTORY_PRINTER_PORT:-9100}
       INVENTORY_PRINTER_TAPE_MM: ${INVENTORY_PRINTER_TAPE_MM:-24}
+      INVENTORY_PRINTER_FORMAT: ${INVENTORY_PRINTER_FORMAT:-standard}
       QUARKUS_VERTX_CLUSTER_CLUSTERED: "true"
       QUARKUS_VERTX_CLUSTER_HOST: 172.28.0.12
       QUARKUS_VERTX_CLUSTER_PORT: "15701"

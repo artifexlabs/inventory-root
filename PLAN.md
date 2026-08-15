@@ -804,6 +804,23 @@ arriving ~2026-08-13).*
    stage-3 interface, with host-OS specifics (CUPS raw queue vs direct usb device)
    recorded then. Die-cut media sizing enters the composer as a second label
    geometry (width × height instead of fixed-height continuous tape).
+   - **Hardware verified on the bench 2026-08-14** (probe + first print over raw
+     TCP 9100 at 10.0.1.132): `~HI` answers `GK420t-200dpi,V61.17.17Z,8,2104KB` —
+     ZPL II live, 203 dpi, Ethernet variant confirmed (so `Tcp9100Transport`
+     carries it unchanged, connectivity question closed). Gap-sensed label pitch
+     calibrates to **836 dots (4.12 in)** = the 4-in label plus its ~1/8-in die-cut
+     gap, so the printable geometry stays 457×812 and `^LL` is deliberately
+     omitted — gap sensing drives the feed on die-cut media. A hand-written
+     `large`-layout ZPL test label printed clean (border box, mag-10 `^BQ` QR
+     ≈1.8 in, name/id/fields). Noted: ZPL's `^BQ` magnification caps at 10, so a
+     true 2-in QR comes from the `^GFA` bitmap path (where size is arbitrary) —
+     which is the planned encoder anyway.
+   - **PRINT DISCIPLINE** *(standing, 2026-08-14)*: label stock is consumed by
+     every test. Once code is verified, printing happens ONLY on explicit
+     instruction, or with prior notice that a change needs re-verification.
+     Everything else uses golden files, the fake-printer sink, and ZPL
+     inspection. (The Brother powers off after ~10 min idle — unreachable is
+     normal, not broken.)
    - **Two named label formats** *(added 2026-08-12; media in hand/ordered)*:
      - `standard` — 2.25×1.25 in (457×254 dots @203 dpi): the Brother layout
        adapted — full-height QR (~1.1 in) left, name + id right. The default.
