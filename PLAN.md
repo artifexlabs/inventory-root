@@ -392,6 +392,12 @@ rather than an emergency patch.
 - **Schema collapses** to a minimal changeset set — no data is deployed, so the
   13-changeset accretion is rewritten as the schema it should have been.
 
+### Phase 16 — Photo-native places: picture-as-location + map assets *(fifteenth milestone — detail below; added and EXECUTED 2026-08-15)*
+- Ongoing items 2 and 3, unblocked by Phase 15's location-is-a-container
+  collapse: one upload creates a location item WITH the photo attached
+  (coordinates pinned from client GPS or EXIF), and an asset can be a **map**
+  whose annotator boxes become PLACES (type=location items) instead of things.
+
 ## First milestone (Phase 1, implementable detail)
 
 1. **`inventory-api`** — de-codegen and extend:
@@ -1133,6 +1139,44 @@ multi-membership and rejecting cycles; a coordinate-inheritance test across a
 three-deep chain; an asset-replace test asserting the old bytes are recoverable from
 the audit event; golden-file/ink tests for the label additions.*
 
+## Fifteenth milestone (Phase 16: photo-native places) — EXECUTED 2026-08-15
+
+*Added and executed 2026-08-15 (ongoing items 2 + 3). As built:*
+
+1. **`inventory-api`** — `AssetInfo` gains `kind` (`photo` default / `map`;
+   free-form like `Item.type`; wire key `kind`); `AssetStore` gains the
+   kind-aware `store(...)` and `createItemFromPhoto(name, displayName, type,
+   containerId, filename, contentType, data, explicitCoordinates, kind)` →
+   `PhotoItem(item, asset)`. Bus: `ASSETS_CREATE_ITEM` (`assets.create-item`,
+   WRITE role) answered by the existing AssetsVerticle address;
+   `AssetContent.kind()` defaults null (replace never changes kind).
+2. **`inventory-impl`** — `002-assets.yaml` amended in place (kind column,
+   NOT NULL default `photo`) under the same no-data-deployed license as the
+   Phase 15 collapse. `PgAssetStore.createItemFromPhoto` is ONE transaction:
+   container check → items INSERT (with latitude/longitude + container_id) →
+   `item.create` (+ `item.contain` when placed) → assets INSERT →
+   `asset.attach`, all announced after commit; InMemory composes its audited
+   primitives, mirroring InMemoryRegionSystem. Coordinates resolve explicit >
+   EXIF > none and pin the CREATED ITEM as well as the asset.
+3. **`inventory-web-api`** — `POST /api/v1/items/from-photo?name=&type=&kind=&container=&lat=&long=`
+   (raw body + X-Filename, like asset upload) → 201 `{item, asset}`; 400
+   nameless, 404 unknown container. Plain upload gains `?kind=`.
+4. **`inventory-web-app`** — items page gains "New place from photo"
+   (name + file + map checkbox → the created place's page, annotator ready);
+   the item-page upload form gains the map checkbox; map assets show a badge.
+   The island takes `asset-kind`: in map mode boxes render as dashed purple
+   places, the describe panel becomes "Name this place"/"Create place", and
+   `resolveTypeForKind` forces `type=location` — through the SAME make-item
+   call (the "location-flavored sibling" for free).
+5. **Tests** — impl: kind round-trip/default/replace-preserves (memory) and
+   the from-photo transaction with EXIF pinning, containment, and
+   unknown-container refusal (memory + Pg); web-api: from-photo flow (EXIF
+   pin, audit rows, map+contained variant, 400/404) and map-kind upload with
+   a box becoming a contained place; web-app: from-photo form → place page
+   with annotator mounted (`asset-kind="photo"`), map upload → island map
+   mode + badge; vitest: `resolveTypeForKind`. iOS follows later, as with
+   Phase 15 (contracts settle first).
+
 ## Label pipeline and printer testing
 
 *Added 2026-08-06. The label path decomposes into four stages; the first three are fully
@@ -1229,14 +1273,16 @@ free. Item 4 is standalone.
 - [x] **1. Location as a container type** *(DONE — Phase 15, 2026-08-15)* — model a location as a type of
       container, unifying the "what holds what" hierarchy (items in containers in
       locations) under one containment model. *Foundation for 2 and 3.*
-- [ ] **2. Picture-as-location** *(UNBLOCKED by Phase 15: a location is now just a container)* — upload a picture that IS a location (not just
+- [x] **2. Picture-as-location** *(DONE — Phase 16, 2026-08-15)* — upload a picture that IS a location (not just
       an asset attached to an item), which can then hold containers. *Builds
       on 1.*
-- [ ] **3. "Map" asset type** *(UNBLOCKED by Phase 15)* — an asset kind on which boxes are drawn (same
+- [x] **3. "Map" asset type** *(DONE — Phase 16, 2026-08-15)* — an asset kind on which boxes are drawn (same
       annotator mechanics as Phase 8) but the boxes become LOCATIONS rather than
       items — e.g. a floor plan or garage photo marking out named places.
       *Builds on 1; pairs naturally with 2. `makeItemFromRegion` gains a
-      location-flavored sibling.*
+      location-flavored sibling — as built, the sibling came FREE: post-Phase-15
+      a location is an item of type=location, so the existing make-item call
+      mints places; only the island's map mode was new.*
 - [x] **4. "Heavy" flag on items** *(DONE — Phase 15, 2026-08-15)* — a checkbox data element denoting an item is
       difficult to move. Does NOT replace weight (`weightGrams` stays); this is a
       human judgment ("two-person lift", "don't bother relocating"), not a
