@@ -278,8 +278,13 @@ unknown.*
 installs Node v20.18.1; vite 7 needs ≥ 20.19). The annotator island compiled unchanged
 (Svelte 5 legacy syntax + `customElement` path), `npm audit` reports 0 vulnerabilities,
 local and CI `mvn verify` green (run 31715299939), and **open Dependabot alerts dropped
-21 → 0**. Remaining nicety, not a gate failure: an in-browser smoke of the annotator
-island under Svelte 5 (the Quarkus page tests cover serving, not pointer interaction).
+21 → 0**. The remaining nicety — an in-browser smoke of the annotator island under
+Svelte 5 — PASSED 2026-08-15: headless Chromium (Playwright container sharing the
+devcontainer's network) drove the two-tier dev stack through login → real pointer
+drag (bare region persisted at exact normalized coords) → describe form →
+make-item → linked box, with the created item a container contained by the
+photographed space. This also covers the ninth milestone's standing
+drag-a-box-in-a-browser human gate.
 
 GitHub reports **21 open Dependabot alerts on `inventory-web-app` (2 critical, 1
 high, 16 moderate, 2 low)** — all in the npm island toolchain under
