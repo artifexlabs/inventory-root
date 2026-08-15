@@ -46,9 +46,5 @@ Each container would be 1 or more verticles that communicates across the network
 
 All data must be stored or changed in a transactioanlly complete way.  The system should be capable of going down and restarting from cold or warm without issue.
 
-# Unknowns
-
-It is unknown what the best path forward is for a Quarkus implementation.  We have only passing knowledge of the frameworks involved, and Vertx has moved forward as have the various dependency injection and reactive frameworks underneath.
-
 
 
