@@ -1394,8 +1394,9 @@ free. Item 4 is standalone.
       hardware print only on explicit instruction. *Sibling: 15 (2x-large) —
       implement together; they share the wider-stock order and the new
       geometry work.*
-- [ ] **15. "2x-large" Zebra label format** *(added 2026-08-15)* - the fourth named
-      format: **4×6 in (~813×1218 dots)**, shipping-label size — everything
+- [ ] **15. "2x-large" Zebra label format** *(added 2026-08-15; measured size
+      corrected 4×6→**4×6.5** same day)* - the fourth named
+      format: **4×6.5 in (~813×1320 dots)**, shipping-label size — everything
       x-large carries plus the rest of what the item knows: coordinates, tags,
       wrapped description, printed-on date, with the QR pushed toward ~3 in.
       Same plumbing (`inventory.printer.format=2x-large`, `?format=2x-large`),
