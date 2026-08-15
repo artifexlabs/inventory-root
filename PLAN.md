@@ -1379,7 +1379,13 @@ free. Item 4 is standalone.
       printed thing.*
 - [ ] **13. Geospatial hooks** - The system could produce notifications (or generate an ios reminder)
       for when you get near an item that needs to be examined (like for freshness or inventory)
-- [ ] **14. "x-large" Zebra label format** *(added 2026-08-15; resized 4×6→4×4 same day)* -
+- [x] **14. "x-large" Zebra label format** *(added 2026-08-15; resized 4×6→4×4 same
+      day; CODE + GOLDENS DONE same day — built with 15 as one geometry pass:
+      `composeXLarge` 812×812, QR 2.5 in centered, full ULID on ONE mono line,
+      type/qty as fixed columns, location/expiry/HEAVY/footer; devcontainer
+      golden `golden-x-large-812x812.png` pinned, existing goldens regenerated
+      byte-identical. AWAITING HARDWARE SMOKE on the 4-in stock arriving
+      2026-08-21 — print only on explicit instruction)* -
       a third named format beyond `standard` and `large`: a LARGER QR code and
       MORE data fields. The GK420t is a 4-inch (203 dpi) printer, so x-large
       means real 4-inch-wide die-cut stock — **4×4 in (~813×812 dots)** — where
@@ -1396,8 +1402,13 @@ free. Item 4 is standalone.
       hardware print only on explicit instruction. *Sibling: 15 (2x-large) —
       implement together; they share the wider-stock order and the new
       geometry work.*
-- [ ] **15. "2x-large" Zebra label format** *(added 2026-08-15; measured size
-      corrected 4×6→**4×6.5** same day)* - the fourth named
+- [x] **15. "2x-large" Zebra label format** *(added 2026-08-15; measured size
+      corrected 4×6→**4×6.5** same day; CODE + GOLDENS DONE same day with 14:
+      `compose2xLarge` 812×1320, QR 3 in, adds own-coordinates "@ lat, long"
+      (deliberately NOT effective/inherited — the location line already names
+      the container chain), sorted rendered tags wrapped to 3 lines, and the
+      description wrapped to 6; golden `golden-2x-large-812x1320.png` pinned.
+      AWAITING HARDWARE SMOKE with 14)* - the fourth named
       format: **4×6.5 in (~813×1320 dots)**, shipping-label size — everything
       x-large carries plus the rest of what the item knows: coordinates, tags,
       wrapped description, printed-on date, with the QR pushed toward ~3 in.
