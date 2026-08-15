@@ -1388,8 +1388,10 @@ free. Item 4 is standalone.
       The composer already owns formats as pure layout functions and the encoders
       are format-agnostic, so this is one new geometry + `inventory.printer.format=x-large`
       + `?format=x-large` riding the existing selection plumbing, plus golden-file
-      pinning like the other two. Blocked on ordering the wider die-cut stock;
-      exact field set finalized at implementation against real items (same rule
+      pinning like the other two. Stock ORDERED 2026-08-15, arriving Friday
+      2026-08-21 — code + goldens can land ahead of it; only the hardware smoke
+      waits for arrival.
+      Exact field set finalized at implementation against real items (same rule
       as `large`). Print discipline applies: verify via goldens/Labelary first,
       hardware print only on explicit instruction. *Sibling: 15 (2x-large) —
       implement together; they share the wider-stock order and the new
@@ -1400,5 +1402,6 @@ free. Item 4 is standalone.
       x-large carries plus the rest of what the item knows: coordinates, tags,
       wrapped description, printed-on date, with the QR pushed toward ~3 in.
       Same plumbing (`inventory.printer.format=2x-large`, `?format=2x-large`),
-      same golden-file gate, same stock-ordering blocker and print discipline.
+      same golden-file gate, same stock order (arriving 2026-08-21) and print
+      discipline.
       *Builds with 14 — one geometry pass covers both.*
