@@ -228,6 +228,62 @@ gateway, in contrast, REQUIRES the fabric — no workers, no API.
   `inventory.events.bus` = `none` (default) | `local` | `clustered`; exporter
   poll interval `inventory.exporter.poll-interval-ms`.
 
+## Formal releases (Phase 14)
+
+One `vX.Y.Z` tag on the superproject releases the whole platform. `develop`
+stays `0.0.1-SNAPSHOT` forever (the `${revision}` default in
+inventory-parent); release versions exist only at tags.
+
+Cutting a release:
+
+```bash
+just release-plan 1.2.0    # checks + shows exactly what would happen
+just release 1.2.0         # full verify at -Drevision=1.2.0, then tags:
+                           #   v1.2.0 on the superproject (HEAD)
+                           #   v1.2.0 in every submodule at its RECORDED SHA
+```
+
+Nothing pushes automatically (house rule). When ready:
+
+```bash
+git push origin v1.2.0                              # triggers release.yml
+git submodule foreach 'git push origin v1.2.0'      # mirror tags
+```
+
+`release.yml` then: builds the reactor at `-Drevision=1.2.0` (full verify),
+native-images inventory-web-app, and pushes
+`ghcr.io/mykelalvis/inventory-root/<module>:1.2.0` (+`:latest`) for
+inventory-server, inventory-web-api, inventory-exporter (JVM images — the
+cluster manager is not yet proven under native) and inventory-web-app
+(native). It ends by drafting a GitHub Release with the run-this-version
+snippet.
+
+After the FIRST release: verify all four packages show **Private** in the
+GHCR UI (user-account packages default private — check, don't assume).
+
+Running a released version (any machine with `docker login ghcr.io`):
+
+```bash
+INVENTORY_VERSION=1.2.0 docker compose -f docker-compose.yml -f docker-compose.release.yml up -d
+```
+
+Rolling back a bad release: deploy the previous version with the overlay
+(images are immutable — nothing needs rebuilding); delete the bad GHCR
+package versions and the draft release; delete the tags
+(`git tag -d v1.2.0` + `git push origin :refs/tags/v1.2.0`, same in
+submodules) only if the version number is to be reused, which it normally
+should not be.
+
+The devcontainer image lives in the same namespace
+(`ghcr.io/mykelalvis/inventory-root/inventory-devcontainer:latest`) but is
+`:latest`-only — a tooling image, not a release artifact. Note: on the push
+that renamed it into the namespace, ci.yml can't pull until
+devcontainer-image.yml has published once — re-run ci after it goes green.
+
+Mobile apps are deliberately NOT in this pipeline: iOS releases via
+TestFlight/App Store and Android via Play Console, each with its own
+versioning and signing, in their own future phases.
+
 ## Notes
 
 - Orchestrator target (swarm/nomad/k8s) still open; this compose file is the portable

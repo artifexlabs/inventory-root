@@ -1,5 +1,5 @@
 # Publishes the dual-use build container to GHCR whenever it changes.
-# ci.yml consumes ghcr.io/mykelalvis/inventory-devcontainer:latest.
+# ci.yml consumes ghcr.io/mykelalvis/inventory-root/inventory-devcontainer:latest.
 name: devcontainer-image
 
 on:
@@ -19,8 +19,8 @@ jobs:
       - name: Log in to GHCR
         run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
       - name: Build image
-        run: docker build -t "ghcr.io/${{ github.repository_owner }}/inventory-devcontainer:latest" .devcontainer
+        run: docker build --label "org.opencontainers.image.source=https://github.com/${{ github.repository }}" -t "ghcr.io/${{ github.repository }}/inventory-devcontainer:latest" .devcontainer
       - name: Smoke the image
-        run: docker run --rm "ghcr.io/${{ github.repository_owner }}/inventory-devcontainer:latest" bash -lc "java -version && mvn -version && docker --version && git --version"
+        run: docker run --rm "ghcr.io/${{ github.repository }}/inventory-devcontainer:latest" bash -lc "java -version && mvn -version && docker --version && git --version"
       - name: Push image
-        run: docker push "ghcr.io/${{ github.repository_owner }}/inventory-devcontainer:latest"
+        run: docker push "ghcr.io/${{ github.repository }}/inventory-devcontainer:latest"

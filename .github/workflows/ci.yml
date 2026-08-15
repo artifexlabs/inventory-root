@@ -3,8 +3,10 @@
 # docker socket is mounted so Testcontainers/Dev Services work.
 #
 # Note: the devcontainer-image workflow must have published
-# ghcr.io/mykelalvis/inventory-devcontainer:latest at least once before this
-# can run (chicken-and-egg on the very first push only).
+# ghcr.io/mykelalvis/inventory-root/inventory-devcontainer:latest at least once before this
+# can run (chicken-and-egg on the very first push only — and again on the
+# push that RENAMED the image into the inventory-root namespace: re-run ci
+# after devcontainer-image goes green).
 name: ci
 
 on:
@@ -17,7 +19,7 @@ jobs:
   verify:
     runs-on: ubuntu-latest
     container:
-      image: ghcr.io/${{ github.repository_owner }}/inventory-devcontainer:latest
+      image: ghcr.io/${{ github.repository }}/inventory-devcontainer:latest
       credentials:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}

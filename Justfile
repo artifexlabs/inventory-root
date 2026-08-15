@@ -342,3 +342,59 @@ rollback count="1":
       --username=inventory --password={{ pg_password }} \
       --search-path=/liquibase/changelog --changelog-file=db/changelog-master.yaml \
       rollback-count {{ count }}
+
+# --- release (Phase 14: tag-driven images to private GHCR) --------------------
+
+# Show what `just release <version>` would do — checks only, no verify, no tags.
+[group('release')]
+release-plan version:
+    @just _release-checks {{ version }}
+    @echo "release plan for v{{ version }}:"
+    @echo "  1. full reactor verify at -Drevision={{ version }}"
+    @echo "  2. annotated tag v{{ version }} on the superproject (HEAD)"
+    @git submodule status | awk '{ sub(/^[+-]?/, "", $1); printf "  3. tag v{{ version }} in %s at recorded %s\n", $2, substr($1, 1, 12) }'
+    @echo "  4. NOTHING pushes. Pushing the superproject tag triggers release.yml,"
+    @echo "     which publishes to ghcr.io/mykelalvis/inventory-root/{inventory-server,inventory-web-api,inventory-exporter,inventory-web-app}:{{ version }}"
+
+# Cut a release LOCALLY: verify the reactor at the release version, then tag
+# the superproject and mirror the tag into every submodule at its recorded
+# SHA. Nothing is pushed — the recipe ends by printing exactly what to push.
+[group('release')]
+release version:
+    @just _release-checks {{ version }}
+    @echo "-> delegating to Maven: full verify at -Drevision={{ version }}"
+    env -u QUARKUS_OIDC_CLIENT_ID -u QUARKUS_OIDC_CREDENTIALS_SECRET -u INVENTORY_OIDC_EXCHANGE_SECRET \
+      mvn -B verify -Drevision={{ version }}
+    @just _release-tags {{ version }}
+
+# Preconditions: clean tree, on develop/master, tag not already taken anywhere.
+_release-checks version:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    [[ "{{ version }}" =~ ^[0-9]+\.[0-9]+\.[0-9]+([-.].+)?$ ]] \
+      || { echo "FAIL: '{{ version }}' is not a semver version (expected X.Y.Z, no leading v)"; exit 1; }
+    BRANCH=$(git rev-parse --abbrev-ref HEAD)
+    [[ "$BRANCH" == "develop" || "$BRANCH" == "master" ]] \
+      || { echo "FAIL: releases cut from develop or master only (on '$BRANCH')"; exit 1; }
+    [ -z "$(git status --porcelain)" ] \
+      || { echo "FAIL: working tree is dirty (submodule pointers count)"; git status --short; exit 1; }
+    git submodule status | grep -q '^[+-]' \
+      && { echo "FAIL: a submodule checkout differs from the recorded SHA"; git submodule status | grep '^[+-]'; exit 1; }
+    git rev-parse -q --verify "refs/tags/v{{ version }}" > /dev/null \
+      && { echo "FAIL: tag v{{ version }} already exists in the superproject"; exit 1; }
+    git submodule --quiet foreach 'git rev-parse -q --verify "refs/tags/v{{ version }}" > /dev/null && { echo "FAIL: tag v{{ version }} already exists in $name"; exit 1; } || true'
+    echo "ok: preconditions clear for v{{ version }}"
+
+# Tag the superproject at HEAD and each submodule at its RECORDED SHA (not its
+# checkout), so the tags reproduce exactly what the superproject pins.
+_release-tags version:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    git tag -a "v{{ version }}" -m "inventory release {{ version }}"
+    echo "tagged superproject: v{{ version }} at $(git rev-parse --short HEAD)"
+    git submodule --quiet foreach 'git tag -a "v{{ version }}" -m "inventory release {{ version }}" "$sha1" && echo "tagged $name: v{{ version }} at ${sha1:0:12}"'
+    echo
+    echo "release v{{ version }} is cut locally. To publish (house rule: only on your say):"
+    echo "  git push origin v{{ version }}            # triggers release.yml -> GHCR images + draft release"
+    echo "  git submodule foreach 'git push origin v{{ version }}'"
+    echo "then verify the four packages show Private in the GHCR UI (RUNBOOK: 'Cutting a release')."

@@ -1,0 +1,110 @@
+# Phase 14: tag-driven formal releases. Pushing vX.Y.Z on the superproject
+# builds the whole reactor at that version and publishes container images to
+# the private GHCR namespace ghcr.io/<owner>/inventory-root/<module>.
+#
+# Images match what docker-compose.yml actually deploys: JVM images for the
+# three bus members (the vertx-infinispan cluster manager is not yet proven
+# under GraalVM native) and a native image for inventory-web-app.
+#
+# Runs on the bare runner, NOT inside the devcontainer image: the Quarkus
+# native container-build bind-mounts the project directory into the builder
+# container, and inside an Actions container job the workspace path exists
+# only in the job container, not on the host — the mount would be empty.
+# The runner therefore installs the same Maven the devcontainer pins.
+name: release
+
+on:
+  push:
+    tags: ['v*']
+
+env:
+  MAVEN_VERSION: 3.9.16
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write   # draft release
+      packages: write   # GHCR push
+    steps:
+      - name: Rewrite SSH GitHub URLs to HTTPS
+        run: git config --global url."https://github.com/".insteadOf "git@github.com:"
+      - uses: actions/checkout@v5
+        with:
+          submodules: recursive
+          token: ${{ secrets.SUBMODULE_TOKEN || github.token }}
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Install Maven ${{ env.MAVEN_VERSION }} and the JDK-21 toolchain
+        run: |
+          curl -fsSL -o /tmp/maven.tar.gz "https://dlcdn.apache.org/maven/maven-3/${MAVEN_VERSION}/binaries/apache-maven-${MAVEN_VERSION}-bin.tar.gz" \
+            || curl -fsSL -o /tmp/maven.tar.gz "https://archive.apache.org/dist/maven/maven-3/${MAVEN_VERSION}/binaries/apache-maven-${MAVEN_VERSION}-bin.tar.gz"
+          sudo tar -xz -C /opt -f /tmp/maven.tar.gz
+          sudo ln -sf /opt/apache-maven-${MAVEN_VERSION}/bin/mvn /usr/local/bin/mvn
+          mkdir -p ~/.m2
+          cat > ~/.m2/toolchains.xml <<EOF
+          <?xml version="1.0" encoding="UTF-8"?>
+          <toolchains>
+            <toolchain>
+              <type>jdk</type>
+              <provides><version>21</version></provides>
+              <configuration><jdkHome>${JAVA_HOME}</jdkHome></configuration>
+            </toolchain>
+          </toolchains>
+          EOF
+          mvn -version
+      - name: Derive version from tag
+        run: echo "VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
+      - name: Build and test the reactor at the release version
+        run: mvn -B -ntp verify -Drevision="$VERSION"
+      - name: Native-image inventory-web-app
+        run: |
+          mvn -B -ntp -pl inventory-web-app -am package -Drevision="$VERSION" \
+            -Dmaven.test.skip=true -Dnative -Dquarkus.native.container-build=true
+      - name: Log in to GHCR
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+      - name: Build and push images
+        run: |
+          set -euo pipefail
+          NS="ghcr.io/${{ github.repository }}"   # <owner>/inventory-root
+          SRC="https://github.com/${{ github.repository }}"
+          build_push() {  # module dockerfile
+            local module="$1" dockerfile="$2"
+            docker build \
+              --label "org.opencontainers.image.source=${SRC}" \
+              --label "org.opencontainers.image.version=${VERSION}" \
+              -f "${module}/src/main/docker/${dockerfile}" \
+              -t "${NS}/${module}:${VERSION}" -t "${NS}/${module}:latest" \
+              "${module}"
+            docker push "${NS}/${module}:${VERSION}"
+            docker push "${NS}/${module}:latest"
+          }
+          build_push inventory-server    Dockerfile.jvm
+          build_push inventory-web-api   Dockerfile.jvm
+          build_push inventory-exporter  Dockerfile.jvm
+          build_push inventory-web-app   Dockerfile.native
+      - name: Draft GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cat > /tmp/release-notes.md <<EOF
+          Platform release ${VERSION}. Images (private GHCR):
+
+          \`\`\`
+          ghcr.io/${{ github.repository }}/inventory-server:${VERSION}
+          ghcr.io/${{ github.repository }}/inventory-web-api:${VERSION}
+          ghcr.io/${{ github.repository }}/inventory-exporter:${VERSION}
+          ghcr.io/${{ github.repository }}/inventory-web-app:${VERSION}
+          \`\`\`
+
+          Run this version (after \`docker login ghcr.io\`):
+
+          \`\`\`
+          INVENTORY_VERSION=${VERSION} docker compose -f docker-compose.yml -f docker-compose.release.yml up -d
+          \`\`\`
+
+          Mobile apps release separately through their store tracks.
+          EOF
+          gh release create "${GITHUB_REF_NAME}" --draft --title "${GITHUB_REF_NAME}" --notes-file /tmp/release-notes.md

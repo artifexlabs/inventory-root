@@ -356,13 +356,15 @@ rather than an emergency patch.
   HTTPS redirect URL (Apple refuses plain-http callbacks — real logins need a
   TLS-fronted deployment or a tunnel even in dev).
 
-### Phase 14 — Formal releases: tag-driven images to private GHCR *(thirteenth milestone — detail below; added 2026-08-14)*
+### Phase 14 — Formal releases: tag-driven images to private GHCR *(thirteenth milestone — detail below; added 2026-08-14; EXECUTED 2026-08-15)*
 - One `vX.Y.Z` tag on the superproject releases the whole platform: CI builds the
   reactor at that version, publishes native images for `inventory-web-api`,
   `inventory-web-app`, and `inventory-exporter` to **private GHCR under
   `ghcr.io/<owner>/inventory-root/<module>:<version>`**, and mirrors the tag into
   every submodule repo. No Maven artifact publishing — images are the deliverable
-  (see the decision row).
+  (see the decision row). *(As built: FOUR images, matching what compose deploys
+  post-`migrate_to_vertx_eb` — JVM images for the three bus members
+  inventory-server/web-api/exporter, native for inventory-web-app.)*
 - **Mobile is explicitly separate.** iOS releases via the store track (Xcode archive
   → TestFlight → App Store; `MARKETING_VERSION`; signing; needs the Phase 11 Apple
   Developer account) and Android, when it exists, via its own (Play Console, signed
@@ -820,10 +822,10 @@ caveats note; the milestone is functionally closed.*
 6. **Zebra GK420t extension** — **EXECUTED 2026-08-14** (built the same day as the
    bench verification below; one hardware print through the full bus path returned
    204 with an attributed `label.print` audit row). Caveat status:
-   (a) STILL OPEN — golden-file pinning of the two die-cut layouts is ink-region
-   invariants only until the goldens are generated inside the devcontainer
-   (Linux/DejaVu fonts, same `-Dlabel.golden.update=true` flow as the Brother
-   layout); (b) RESOLVED 2026-08-14 — the `standard` format printed on hardware
+   (a) RESOLVED 2026-08-15 — both die-cut layouts now have exact-pixel goldens
+   generated inside the devcontainer (Linux/DejaVu; same
+   `-Dlabel.golden.update=true` flow as the Brother layout, refactored into a
+   shared helper; the Brother golden regenerates byte-identical); (b) RESOLVED 2026-08-14 — the `standard` format printed on hardware
    via the `?format=standard` override. The first print exposed two defects,
    both fixed and re-verified on hardware the same day (owner: "Perfect"):
    the fixed-canvas layout redesign (1-in QR; the full id split across two
@@ -968,10 +970,44 @@ credentials; the flip-on is config + secrets only.*
    manual end-to-end Apple login deferred until the Apple Developer account exists
    (Phase 11 checklist) and a TLS-fronted redirect URL is available.
 
-## Thirteenth milestone (Phase 14: formal releases)
+## Thirteenth milestone (Phase 14: formal releases) — EXECUTED 2026-08-15
 
 *Added 2026-08-14. Everything stays inert until a `v*` tag is pushed; `develop` is
-SNAPSHOT forever. Not yet executed.*
+SNAPSHOT forever.*
+
+***As built (2026-08-15)*** — *all seven steps landed; deviations and facts:*
+
+- *Versions: parent AND children unified on `${revision}` (default
+  `0.0.1-SNAPSHOT`) — the parent's old literal `1-SNAPSHOT` is gone, children
+  inherit their version from the parent (no own `<version>` element), and
+  `${inventory.version}` resolves to `${revision}`. `flatten-maven-plugin` 1.6.0
+  (`resolveCiFriendliesOnly`) runs in every module; `.flattened-pom.xml` is
+  gitignored per repo. Gates: full reactor verify green bare and at
+  `-Drevision=9.9.9-scratch`, flattened poms carrying the literal version.*
+- *`release.yml` publishes the FOUR compose-deployed images (JVM for the bus
+  members — vertx-infinispan still unproven under native — native for
+  web-app), each labeled `org.opencontainers.image.source` so packages group
+  under inventory-root. It runs on the BARE runner, not the devcontainer
+  image: Quarkus native container-build bind-mounts the project dir into the
+  builder container, and inside an Actions container job that path exists
+  only in the job container, not on the host — the workflow installs
+  Maven 3.9.16 (dlcdn + archive fallback) and a JDK-21 toolchains.xml
+  instead. It ends by drafting a GitHub Release with the overlay snippet.*
+- *`just release <version>`: preconditions (semver, develop/master, clean tree
+  including submodule pointers, tag free everywhere) → full verify at
+  `-Drevision` → annotated `v<version>` on the superproject + mirrored into
+  every top-level submodule at its RECORDED SHA — locally; the recipe ends by
+  printing exactly what to push. `just release-plan <version>` is the dry-run.
+  Deviation: no git-flow ceremony automation — the recipe tags the current
+  develop/master HEAD; run the flow branching manually if wanted.*
+- *Compose overlay (`docker-compose.release.yml`) predated this execution;
+  devcontainer image renamed into the namespace (both workflows; ci.yml notes
+  the one-time re-run after the rename lands); RUNBOOK gained "Formal
+  releases (Phase 14)".*
+- *Remaining gate (needs an authorized push): pushing a `v0.0.1`-style scratch
+  tag must produce a green `release.yml` run and four PRIVATE packages under
+  the inventory-root namespace — verify visibility in the GHCR UI at first
+  release.*
 
 1. **CI-friendly versions.** Modules move from literal `0.0.1-SNAPSHOT` to
    `${revision}` (default `0.0.1-SNAPSHOT` set in `inventory-parent`), with
