@@ -795,15 +795,18 @@ caveats note; the milestone is functionally closed.*
    module size/quiet zone in the composer before anything else.
 6. **Zebra GK420t extension** — **EXECUTED 2026-08-14** (built the same day as the
    bench verification below; one hardware print through the full bus path returned
-   204 with an attributed `label.print` audit row). Remaining caveats, deliberately
-   open: (a) golden-file pinning of the two die-cut layouts is ink-region
+   204 with an attributed `label.print` audit row). Caveat status:
+   (a) STILL OPEN — golden-file pinning of the two die-cut layouts is ink-region
    invariants only until the goldens are generated inside the devcontainer
    (Linux/DejaVu fonts, same `-Dlabel.golden.update=true` flow as the Brother
-   layout); (b) the `standard` format has passed only the fake-printer path — no
-   hardware print until standard stock is loaded (print discipline applies);
-   (c) the `large` field set was finalized WITHOUT location name (the printer has
-   no LocationSystem access; add it only if a location lookup ever moves into the
-   labels worker). Original step text follows.
+   layout); (b) RESOLVED 2026-08-14 — the `standard` format printed on hardware
+   via the `?format=standard` override (on the loaded LARGE stock: layout lands
+   in the top 1.25 in and gap sensing feeds the full 4-in label — re-verify
+   registration whenever standard stock is actually loaded); (c) RESOLVED
+   2026-08-14 — the `large` field set now includes the location name:
+   `ZebraPrinter.withLocationLookup(...)` (wired from LocationSystem in both
+   producers) resolves the item's locationId best-effort — a failed lookup
+   omits the line, never the label. Original step text follows.
    `ZplEncoder` (stage 2, the
    reference dialect — `^GFA` graphic field from the same 1-bit bitmap, eyeballable
    via Labelary during development) and `inventory.printer=zebra-gk420t` wiring.
