@@ -1015,10 +1015,12 @@ SNAPSHOT forever.*
   devcontainer image renamed into the namespace (both workflows; ci.yml notes
   the one-time re-run after the rename lands); RUNBOOK gained "Formal
   releases (Phase 14)".*
-- *Remaining gate (needs an authorized push): pushing a `v0.0.1`-style scratch
-  tag must produce a green `release.yml` run and four PRIVATE packages under
-  the inventory-root namespace — verify visibility in the GHCR UI at first
-  release.*
+- *Final gate PASSED 2026-08-15: the pushed `v0.0.1` tag produced a green
+  `release.yml` run (31889773080, 12m06s), and all five `inventory-root/*`
+  packages (the four release images + the devcontainer image) verified
+  **private** via the packages API. The legacy pre-rename
+  `inventory-devcontainer` package (outside the namespace) still exists,
+  private — delete at leisure.*
 
 1. **CI-friendly versions.** Modules move from literal `0.0.1-SNAPSHOT` to
    `${revision}` (default `0.0.1-SNAPSHOT` set in `inventory-parent`), with
