@@ -26,8 +26,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
       docker-ce-cli docker-compose-plugin docker-buildx-plugin \
     && rm -rf /var/lib/apt/lists/*
 
-RUN curl -fsSL "https://archive.apache.org/dist/maven/maven-3/${MAVEN_VERSION}/binaries/apache-maven-${MAVEN_VERSION}-bin.tar.gz" \
-      | tar -xz -C /opt \
+# dlcdn is the fast CDN but only keeps current releases; archive.apache.org
+# has everything but is throttled to ~KB/s — fallback only.
+RUN curl -fsSL -o /tmp/maven.tar.gz "https://dlcdn.apache.org/maven/maven-3/${MAVEN_VERSION}/binaries/apache-maven-${MAVEN_VERSION}-bin.tar.gz" \
+      || curl -fsSL -o /tmp/maven.tar.gz "https://archive.apache.org/dist/maven/maven-3/${MAVEN_VERSION}/binaries/apache-maven-${MAVEN_VERSION}-bin.tar.gz" \
+    && tar -xz -C /opt -f /tmp/maven.tar.gz \
+    && rm /tmp/maven.tar.gz \
     && ln -s /opt/apache-maven-${MAVEN_VERSION} /opt/maven \
     && ln -s /opt/maven/bin/mvn /usr/local/bin/mvn
 
