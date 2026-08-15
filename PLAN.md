@@ -1030,8 +1030,11 @@ needs the jars; GitHub Packages is the answer then).
 tests); re-parent-not-multiply and cycle-refusal proven in memory, Postgres
 (recursive CTE), the HTTP surface, and the web-app stub; coordinate inheritance
 across a three-deep chain in both backends; asset-replace recovery of archived
-bytes from the audit event; heavy/expiry label ink pinned. NOTE: the iOS app
-still speaks the OLD surface (locationId, /containers) and needs its own pass.*
+bytes from the audit event; heavy/expiry label ink pinned. The iOS follow-up
+pass EXECUTED the same day (submodule commit "Phase 15: unified containment,
+tags, heavy, expiration"): models/API/UI moved to `containerId`, single
+`/container`, effective `/coordinates`, heavy, tags, expiration — no
+locationId or `/containers` references remain.*
 
 **Why now**: every part of this is cheap exactly once — before real inventory exists.
 The containment change rewrites every item's placement, and the schema collapse is
