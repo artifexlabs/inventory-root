@@ -392,7 +392,7 @@ _release-tags version:
     set -euo pipefail
     git tag -a "v{{ version }}" -m "inventory release {{ version }}"
     echo "tagged superproject: v{{ version }} at $(git rev-parse --short HEAD)"
-    git submodule --quiet foreach 'git tag -a "v{{ version }}" -m "inventory release {{ version }}" "$sha1" && echo "tagged $name: v{{ version }} at ${sha1:0:12}"'
+    git submodule --quiet foreach 'git tag -a "v{{ version }}" -m "inventory release {{ version }}" "$sha1" && echo "tagged $name: v{{ version }} at $sha1"'
     echo
     echo "release v{{ version }} is cut locally. To publish (house rule: only on your say):"
     echo "  git push origin v{{ version }}            # triggers release.yml -> GHCR images + draft release"
