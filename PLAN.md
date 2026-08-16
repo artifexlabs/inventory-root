@@ -405,6 +405,24 @@ rather than an emergency patch.
   the code as an item identity, tags brand/category/source, and attaches the
   catalog's product image as a normal asset.
 
+### Phase 18 — Visual design: make the webapp and mobile app visually appealing *(added 2026-08-16; NOT YET SCOPED — deliberately example-driven)*
+- Both surfaces work but look utilitarian: the webapp is classless Pico.css
+  over semantic Qute markup, the iOS app is stock SwiftUI. This phase gives
+  each a deliberate visual identity.
+- **Process decided up front: iterate from examples the owner supplies.**
+  The owner is collecting reference examples (sites/apps/screenshots whose
+  look is worth stealing from); design rounds start from those, not from a
+  framework choice. No stack decisions until the examples exist — though the
+  existing seams make most directions cheap: the webapp restyles through the
+  design tokens in `app.css` (rebrand-by-editing-values was the Phase 5
+  intent), Pico.css can be themed or swapped without touching templates, and
+  islands are self-contained; SwiftUI theming is view-modifier work.
+- Scope when it executes: webapp pages + the annotator island's chrome, iOS
+  app screens (universal — iPhone and iPad layouts), and enough visual
+  consistency between them that they read as one product. Label layouts are
+  explicitly OUT (they are functional artifacts with their own golden-file
+  discipline).
+
 ## First milestone (Phase 1, implementable detail)
 
 1. **`inventory-api`** — de-codegen and extend:
