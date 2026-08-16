@@ -902,8 +902,16 @@ items list; item CRUD (create with container toggle, edit via full-JSON PUT
 round-trip, swipe delete) plus print-label; in-app camera capture (photo library on
 the simulator) uploads assets and opens a native annotator — drag normalized boxes
 on the photo, describe each box, and the one-shot `regions/make-item` call mints it
-as an item (container by default) contained by the photographed item. Not yet:
-QR scanning, Sign in with Apple (Phase 13 wired server-side; the native button
+as an item (container by default) contained by the photographed item. **QR
+scanning BUILT 2026-08-15**: a VisionKit DataScanner sheet off the items list
+resolves a scanned label's `/i/{id}` deep link (any host/prefix — labels
+survive server moves) or a bare 26-char ULID (the small-label tier of ongoing
+item 11) and opens the item; unsupported devices and the simulator fall back
+to manual link/id entry through the same resolver (`ScannedItemRef`, under
+the app's first XCTest target — `just ios-test` now runs real tests; default
+simulator bumped to iPhone 17, the oldest Xcode 26.3 ships). Physical
+label→phone gate still pending a hardware scan session. Not yet:
+Sign in with Apple (Phase 13 wired server-side; the native button
 arrives with the Apple Developer account), TestFlight/device signing.*
 
 1. **Workspace layout** *(wired 2026-08-09, ahead of execution)*:

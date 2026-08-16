@@ -168,7 +168,7 @@ only, never part of `mvn verify`, the compose stack, or the Linux CI lanes.
 ```sh
 just mobile-build # ALL mobile apps: ios-build then android-build
 just ios-build    # Debug build for the iOS Simulator, unsigned (CODE_SIGNING_ALLOWED=NO)
-just ios-test     # xcodebuild test on a simulator (INVENTORY_IOS_SIMULATOR, default "iPhone 16")
+just ios-test     # xcodebuild test on a simulator (INVENTORY_IOS_SIMULATOR, default "iPhone 17")
 just ios-regen    # regenerate InventoryApp.xcodeproj from project.yml (XcodeGen)
 just ios-open     # open the project in Xcode
 just android-build# Gradle build once the Android app is scaffolded; loud no-op today

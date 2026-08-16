@@ -30,7 +30,7 @@ native_flags := "-Dmaven.test.skip=true -Dnative -Dquarkus.native.container-buil
 ios_app_dir := "inventory-mobile-apps/inventory-ios-app"
 android_app_dir := "inventory-mobile-apps/inventory-android-app"
 ios_scheme := env('INVENTORY_IOS_SCHEME', 'InventoryApp')
-ios_simulator := env('INVENTORY_IOS_SIMULATOR', 'iPhone 16')
+ios_simulator := env('INVENTORY_IOS_SIMULATOR', 'iPhone 17')
 
 # List every task.
 default:
