@@ -30,7 +30,7 @@ possible, including a stable link to the outside source.**
 |---|---|---|---|---|---|
 | **Open Food Facts family** — world.openfoodfacts.org, world.open**products**facts.org, world.open**beauty**facts.org, world.open**petfood**facts.org | food strong; general/beauty/pet-food thinner | REST, **no key, no metering**: `GET https://world.<flavor>.org/api/v2/product/{barcode}.json` (`?fields=` narrows the response) | **ODbL** (database), DbCL (contents), **CC-BY-SA** (images) — attribution + share-alike | `https://world.<flavor>.org/product/{code}` | `product_name`, `brands`, `generic_name`, `quantity` ("330 ml"), `product_quantity` + `product_quantity_unit`, `categories`, `image_url` |
 | **UPCitemdb** — upcitemdb.com | ~722M codes; strongest for general merchandise | free **trial tier, no key**: `GET https://api.upcitemdb.com/prod/trial/lookup?upc={code}` (~100 lookups/day; paid tiers exist but nothing forces pay-per-transaction) | commercial, as-is, no guarantees | `https://www.upcitemdb.com/upc/{code}` | `title`, `brand`, `description`, `category`, `images[]`, `dimension`, `weight`, recorded price range |
-| GS1 "Verified by GS1" | authoritative registry | paid/licensed | — | — | **REJECTED**: licensing conflicts with the standing no-pay-per-transaction constraint |
+| GS1 "Verified by GS1" — verified.gs1.org (replaced GEPIR end-2023) | authoritative registry (the issuer itself) | web lookup **free**, ~30/day per IP, unauthenticated; **no documented free API** — programmatic access is paid (e.g. GS1 US Data Hub, ~$500/yr) | GS1 terms | `https://www.gs1.org/services/verified-by-gs1/results?gtin={code}` | brand, product description, GPC category, net content, company of record, sometimes image. **NO ADAPTER for now**: an adapter would ride the web UI's undocumented endpoint (fragile, ToS-questionable). Useful as a MANUAL verification fallback; revisit if GS1 opens a public API |
 | upcdatabase.org | community, small | keyed API | community | yes | thin — not worth an adapter now |
 
 **Attribution note (ODbL/CC-BY-SA):** the `source=<url>` tag on every
@@ -121,7 +121,9 @@ system, revisit share-alike obligations.
 
 ## Constraints (standing)
 
-- No pay-per-transaction services (GS1 rejected on this).
+- No pay-per-transaction services. (GS1's WEB lookup is free ~30/day, but its
+  programmatic access is paid and its free path has no documented API — hence
+  no adapter, not because a lookup costs money.)
 - Catalog outages or misses must NEVER block item creation — lookup is
   prefill, not a dependency.
 - UPCitemdb trial's ~100/day is ample for a household; the adapter treats 429

@@ -1323,7 +1323,8 @@ free. Item 4 is standalone.
       (409 on marker reuse). REMAINS OPEN: the external UPC catalog lookup to
       prefill metadata — PLANNED 2026-08-16: sources decided (Open Food Facts
       family first under ODbL, UPCitemdb free trial as general-merchandise
-      fallback; GS1 rejected on the no-pay constraint), image-attach + stable
+      fallback; GS1's free web lookup noted as a manual fallback but no
+      adapter — no documented free API), image-attach + stable
       source link, catalog on by default. The full staged plan — research
       table, field mapping, six implementation stages, tests/gates — lives in
       [UPC_CODE.md](UPC_CODE.md) and MOVES INTO THIS FILE as a milestone when
