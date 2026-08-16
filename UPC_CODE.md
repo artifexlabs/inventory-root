@@ -45,7 +45,7 @@ system, revisit share-alike obligations.
 | product_name / title | `name` | trimmed |
 | brand + name | `displayName` | "DeWalt 20V Drill" style |
 | generic_name / description | `description` | |
-| categories / category | suggested `type` | **suggestion only**, user-editable — the EXIF-coordinates precedent: suggested, never silently applied |
+| categories / category | tag `category=<x>` | catalog metadata, not our `type` — `type` stays the user's choice in the create sheet (default `thing`) |
 | product_quantity+unit / weight | `weightGrams` | best-effort parse; absent on failure |
 | image_url / images[0] | downloaded once → **asset** (`kind=photo`) | fetched server-side at creation, never hot-linked |
 | brand | tag `brand=<x>` | searchable via the tag machinery |
@@ -86,7 +86,7 @@ system, revisit share-alike obligations.
    bytes FIRST (outside any transaction), then ONE transaction: create item
    (request-body fields override catalog prefill) → claim identity
    `(upc, gtin13)` (409 if the marker already claims another item) → attach
-   the image asset when present → tags `brand=`, `source=`. Audit rides the
+   the image asset when present → tags `brand=`, `category=`, `source=`. Audit rides the
    existing vocabulary (`item.create`, `item.identity-add`, `asset.attach`) —
    no new actions.
 
@@ -116,7 +116,7 @@ system, revisit share-alike obligations.
 - iOS: `BarcodeRef` XCTests; `just ios-build` + `just ios-test` green.
 - Full reactor `mvn clean verify` green locally and in CI.
 - **Manual gate:** scan a real grocery UPC on the phone → prefilled create →
-  item exists with image, brand/source tags, and the claimed identity; rescan
+  item exists with image, brand/category/source tags, and the claimed identity; rescan
   the same package → the item opens.
 
 ## Constraints (standing)
