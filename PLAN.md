@@ -1333,7 +1333,17 @@ free. Item 4 is standalone.
       UPC also wants an external catalog lookup to prefill metadata for a new item.
       *Shares its storage with 12: build the identity table once and NFC gets its half
       free — do NOT add a bespoke `nfc_uid` column.*
-- [ ] **8. Dots as items on photos** - We should be able to just point at a spot on a photo
+- [x] **8. Dots as items on photos** *(DONE 2026-08-15 — a dot is a zero-by-zero
+      `AssetRegion` (both-zero valid, mixed refused, `isDot()`), so the whole
+      draw-then-describe lifecycle came free: in the annotator island a CLICK
+      (a drag too small to be a box, formerly discarded) now drops a dot at
+      the pointer, rendered as a circle with the box color semantics
+      (bare/linked/map-place/selected) and hit-tested by tap radius;
+      describe/make-item/delete are unchanged. Geometry in annotator-core
+      (`clickToDot`/`isDot`/radius `hitTest`) under vitest; API dot
+      round-trip + promotion in RegionsApiTest; model rules in
+      AssetRegionTest. iOS's native annotator follows later, per the
+      contracts-settle-first pattern.)* - We should be able to just point at a spot on a photo
       and, without actually drawing a box, denote an item.
 - [ ] **9. AI assistance in cataloging** - We should be able to use an AI cli tool to point 
       an LLM at a photo of things and have it build a set of items as descriptions.  It should 
