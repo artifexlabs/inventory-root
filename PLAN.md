@@ -1341,9 +1341,32 @@ free. Item 4 is standalone.
       use a mobile device's camera on an existing thing.  We would definitely not want to 
       use some sort of service that requires us to pay per-transaction.  It would need to be
       used via a CLI or something that lets
-- [ ] **10. Add a switch to turn on Chain-print labels** - This would allow Brother labels to 
+- [x] **10. Add a switch to turn on Chain-print labels** *(DONE 2026-08-15, built
+      with 11 — `inventory.printer.chain=true` (both producers) makes every
+      Brother job end with print-WITHOUT-feed (0x0C) and the advanced-mode
+      chain bit cleared, so a run shares one ~25 mm leader; the "extend the
+      tape" action is `LabelPrinter.feed()` → `labels.feed` bus action (WRITE,
+      audits `label.feed`) → `POST /api/v1/labels/feed` → an "Extend tape"
+      button beside Print label on the item page. Die-cut/absent printers
+      answer 503 ("nothing to feed"); the encoder's feed job is a blank
+      8-line raster ending 0x1A. HARDWARE-VERIFY with the next Brother
+      session — print discipline applies.)* - This would allow Brother labels to 
       be more easily and efficiently utilized.  IT would also need an "extend the tape" button.
-- [ ] **11. Create a small Brother QR Code** - Make the smallest possible QR code for an object
+- [x] **11. Create a small Brother QR Code** *(DONE 2026-08-15, built with 10 —
+      all three planned changes landed: (a) the composer now draws the QR at
+      its NATURAL module-exact size (integer dots per module, vertically
+      centered; oversize refused, never clipped) from `QrCodes.bareMatrix`
+      (margin 0 — the tape supplies the quiet zone) + `QrCodes.render`;
+      (b) tests pin the plan's arithmetic (URL → v3/29 modules at L, bare
+      ULID → v2/25 alphanumeric at Q); (c) narrow tapes go QR-only with
+      tiered payloads: 12 mm carries the URL at 2 dots/module (58 dots),
+      9 mm tiers down to the bare ULID (50 dots exactly), 6 mm refuses
+      loudly (no scannable code fits 32 dots). The bare-ULID payload
+      resolves in the iOS scanner (built the same day) and the web `/i/{id}`
+      route only via URL — a generic camera app shows the raw ULID, the
+      accepted cost. The served `qr.png` keeps its margin (screen scanning
+      needs its own quiet zone). HARDWARE-VERIFY on 12/9 mm tape when
+      loaded — print discipline applies.)* - Make the smallest possible QR code for an object
       so that we could just attach the QR code to something very small.  The QR code should reference
       just like the original one, but it's possible that we could make one slightly smaller that
       the phone camera could still scan.  That will need experimentation.
