@@ -1381,8 +1381,11 @@ free. Item 4 is standalone.
       resolves in the iOS scanner (built the same day) and the web `/i/{id}`
       route only via URL — a generic camera app shows the raw ULID, the
       accepted cost. The served `qr.png` keeps its margin (screen scanning
-      needs its own quiet zone). HARDWARE-VERIFY on 12/9 mm tape when
-      loaded — print discipline applies.)* - Make the smallest possible QR code for an object
+      needs its own quiet zone). HARDWARE-VERIFY on 9 mm tape — ORDERED
+      2026-08-16, arriving Tuesday 2026-08-18; the smoke is one QR-only label
+      (bare-ULID v2 @ 2 dots/module, 50 dots exactly) phone-scanned via the
+      iOS app, plus a chain-print run to co-verify item 10 in the same
+      session. Print discipline applies.)* - Make the smallest possible QR code for an object
       so that we could just attach the QR code to something very small.  The QR code should reference
       just like the original one, but it's possible that we could make one slightly smaller that
       the phone camera could still scan.  That will need experimentation.
