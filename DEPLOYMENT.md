@@ -46,6 +46,7 @@ iOS app ──HTTP──▶ inventory-web-api (:8081, JVM)     ◀── the ONL
 | `INVENTORY_BUS_TOKEN` | `dev-bus-token` | the envelope fabric token; change outside dev, same value on gateway and server |
 | `INVENTORY_ADMIN_EMAIL` / `INVENTORY_ADMIN_PASSWORD` | `admin@example.com` / `change-me` | seeded idempotently at server startup |
 | `INVENTORY_PRINTER` / `INVENTORY_PRINTER_HOST` / `..._PORT` / `..._TAPE_MM` | `log` / – / `9100` / `24` | hardware label printer (Brother PT-P750W); consumed by inventory-server |
+| `INVENTORY_CATALOG` | `open-facts,upcitemdb` | external UPC catalog sources for scan-to-create prefill (Phase 17), ordered; `off` disables lookups — creation still works from typed fields. The ONLY external calls the stack ever makes. |
 | `INVENTORY_VERSION` | `latest` | released deploys only (see below) |
 | `INVENTORY_GHCR_OWNER` | `mykelalvis` | released deploys only |
 

@@ -398,6 +398,13 @@ rather than an emergency patch.
   (coordinates pinned from client GPS or EXIF), and an asset can be a **map**
   whose annotator boxes become PLACES (type=location items) instead of things.
 
+### Phase 17 — UPC catalog lookup: scan a product barcode, get a filled-in item *(sixteenth milestone — detail below; planned 2026-08-16 via the since-retired staging doc UPC_CODE.md, EXECUTED the same day)*
+- Completes ongoing item 7's deferred tail: UPC/EAN symbologies in the phone
+  scanner, an external catalog lookup (the only seam through which the system
+  ever calls an external service), and a one-shot create-from-UPC that claims
+  the code as an item identity, tags brand/category/source, and attaches the
+  catalog's product image as a normal asset.
+
 ## First milestone (Phase 1, implementable detail)
 
 1. **`inventory-api`** — de-codegen and extend:
@@ -1187,6 +1194,79 @@ the audit event; golden-file/ink tests for the label additions.*
    mode + badge; vitest: `resolveTypeForKind`. iOS follows later, as with
    Phase 15 (contracts settle first).
 
+## Sixteenth milestone (Phase 17: UPC catalog lookup) — EXECUTED 2026-08-16
+
+*Planned and executed 2026-08-16 (the plan staged briefly in a root
+UPC_CODE.md, moved here on execution and the file retired). Decisions locked
+the same day: sources = both, open-data first; product image = attach + link;
+default = on. As built:*
+
+**Catalog sources (researched 2026-08-16):**
+
+| Source | Coverage | Access | License | Stable link |
+|---|---|---|---|---|
+| **Open Food Facts family** — world.openproductsfacts.org (tried FIRST — this is an inventory, not a pantry), world.openfoodfacts.org, world.openbeautyfacts.org, world.openpetfoodfacts.org | food strong; general/beauty/pet-food thinner | REST, no key, no metering: `GET /api/v2/product/{gtin}.json?fields=…` | **ODbL** (db), DbCL (contents), CC-BY-SA (images) | `https://world.<flavor>.org/product/{code}` — carried as the item's `source=` tag, which is also our ODbL attribution |
+| **UPCitemdb** trial | ~722M codes, strongest general merchandise | keyless trial `GET /prod/trial/lookup?upc=`, ~100/day; 429 degrades to a miss | commercial, as-is | `https://www.upcitemdb.com/upc/{code}` |
+| GS1 "Verified by GS1" | authoritative (the issuer) | free WEB lookup ~30/day; **no documented free API** (programmatic = paid Data Hub ~$500/yr) | GS1 terms | manual verification fallback only — NO adapter (would ride an undocumented endpoint); revisit if GS1 opens a public API |
+| upcdatabase.org | community, thin | keyed | community | not worth an adapter |
+
+**Field mapping (catalog → ours):** name→`name`; brand+name→`displayName`
+(skipped when the name already starts with the brand); generic_name/
+description→`description`; category→tag `category=<leaf>` (most-specific
+segment, language prefix stripped — NOT our `type`, which stays the user's
+choice, default `thing`); product_quantity+mass-unit / "1.2 pounds"→
+`weightGrams` best-effort (volume units skipped); image→downloaded ONCE
+(5 MB cap, only from URLs our own adapters produced — client URLs are never
+fetched, SSRF) and attached as a photo asset; product page→tag
+`source=<url>`; the GTIN→identity `(upc, gtin13)` via item 7's machinery.
+
+1. **`Gtin`** (impl, beside QrCodes): UPC-A/EAN-13/EAN-8 → canonical
+   **GTIN-13** by leading-zero padding (the GS1 check digit is right-aligned,
+   so padding preserves it); check-digit validation; 8 digits read as EAN-8 —
+   only clients know the symbology, so UPC-E expands CLIENT-side.
+2. **`UpcCatalog` seam** (api) + adapters (impl, async java.net.http):
+   `OpenFactsCatalog` (flavor fallback in order), `UpcItemDbCatalog` (429 →
+   miss), `CompositeCatalog` (SEQUENTIAL, first hit wins — the rate-limited
+   trial is only asked when open data misses), `UpcCatalog.OFF`. Config
+   `inventory.catalog` = `open-facts,upcitemdb` (default) | `off` | subsets;
+   base-URL overrides point tests at local stub fixtures — CI never touches
+   the network. Every failure mode degrades to a miss: **lookup is prefill,
+   never a dependency of creation** (CatalogOffTest proves create still
+   works with the catalog off).
+3. **Bus + gateway**: `catalog.upc` (READ) and `catalog.create-item` (WRITE)
+   on a new `CatalogVerticle` (worker thread — external HTTP);
+   `GET /api/v1/catalog/upc/{gtin}` → 200 | 400 bad digit | 404 miss |
+   503 off. Lookups are reads — no audit row.
+4. **One-shot** `POST /api/v1/items/from-upc?gtin=&container=`: catalog
+   entry + image fetched OUTSIDE the transaction, then ONE transaction —
+   item (body fields beat prefill) → identity claim (atomic INSERT ON
+   CONFLICT; a claimed code 409s and rolls back the WHOLE creation) → tags →
+   image asset. `AssetStore.createItemFromUpc(UpcItemCreation, image…)` in
+   both backends (memory checks container-then-identity in the same
+   precedence as Pg so both refuse identically). Audit rides the existing
+   vocabulary: `item.create`, `item.contain`, `item.identity-add`,
+   `item.tag`, `asset.attach`.
+5. **iOS**: DataScanner symbologies now `[.qr, .ean13, .ean8, .upce]`
+   (Vision has no `.upca` — UPC-A arrives as ean13); `BarcodeRef` normalizes
+   symbology-aware (UPC-E expands per the GS1 table — the same eight digits
+   as EAN-8 are a DIFFERENT code, which the tests pin) → claimed codes open
+   their item via `by-identity`, unclaimed ones open `UpcCreateSheet`
+   (catalog prefill, editable, image preview, source link, 409 explained).
+   Manual entry accepts links, ULIDs, and barcode digits. **Android:
+   deferred to its real v1.**
+6. **Web**: "Add by UPC" on the items page → `/items/upc` preview (prefill
+   or fill-in-yourself on a miss) → create-from-upc → the item page.
+7. **Tests**: GtinTest; CatalogAdaptersTest (local stub HTTP server — field
+   mapping, flavor fallback, 429/unreachable degradation, composite order,
+   image cap); UpcCreationTest + PgInventorySystemTest (one-transaction
+   rollback proven: a refused claim leaves NO orphan item); web-api
+   CatalogApiTest/CatalogOffTest (prefill, canonicalization in the URL,
+   full create with downloaded image bytes verified, 409, catalog-miss
+   create, name-required 400, container 404); web-app UpcPagesTest; iOS
+   BarcodeRefTests. Full reactor + `just ios-build`/`ios-test` green.
+8. **Remaining gate (manual, needs a phone + a grocery item)**: scan a real
+   UPC end-to-end — prefilled create, then rescan opens the item.
+
 ## Label pipeline and printer testing
 
 *Added 2026-08-06. The label path decomposes into four stages; the first three are fully
@@ -1320,15 +1400,10 @@ free. Item 4 is standalone.
       four `items.identity-*`/`items.find-by-identity`/`items.identities-of`
       bus actions, and gateway routes `PUT/GET /items/{id}/identities`,
       `DELETE /items/{id}/identities/{kind}/{value}`, `GET /items/by-identity`
-      (409 on marker reuse). REMAINS OPEN: the external UPC catalog lookup to
-      prefill metadata — PLANNED 2026-08-16: sources decided (Open Food Facts
-      family first under ODbL, UPCitemdb free trial as general-merchandise
-      fallback; GS1's free web lookup noted as a manual fallback but no
-      adapter — no documented free API), image-attach + stable
-      source link, catalog on by default. The full staged plan — research
-      table, field mapping, six implementation stages, tests/gates — lives in
-      [UPC_CODE.md](UPC_CODE.md) and MOVES INTO THIS FILE as a milestone when
-      the work is picked up.)* - We should lookup default
+      (409 on marker reuse). The external UPC catalog lookup — the tail
+      deferred at the core's execution — DONE 2026-08-16 as **Phase 17**
+      (sixteenth milestone): scan flow, catalog seam and adapters, one-shot
+      create-from-UPC. FULLY CLOSED except Phase 17's manual phone gate.)* - We should lookup default
       information about items that we add by scanning UPC codes or perhaps some sort of
       QR code. *(NFC assessed and folded in 2026-08-14.)* All of these are one problem
       underneath — a physical marker resolving to an item — so build ONE
