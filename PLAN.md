@@ -1321,8 +1321,13 @@ free. Item 4 is standalone.
       bus actions, and gateway routes `PUT/GET /items/{id}/identities`,
       `DELETE /items/{id}/identities/{kind}/{value}`, `GET /items/by-identity`
       (409 on marker reuse). REMAINS OPEN: the external UPC catalog lookup to
-      prefill metadata — deliberately deferred; needs a catalog-source
-      decision.)* - We should lookup default
+      prefill metadata — PLANNED 2026-08-16: sources decided (Open Food Facts
+      family first under ODbL, UPCitemdb free trial as general-merchandise
+      fallback; GS1 rejected on the no-pay constraint), image-attach + stable
+      source link, catalog on by default. The full staged plan — research
+      table, field mapping, six implementation stages, tests/gates — lives in
+      [UPC_CODE.md](UPC_CODE.md) and MOVES INTO THIS FILE as a milestone when
+      the work is picked up.)* - We should lookup default
       information about items that we add by scanning UPC codes or perhaps some sort of
       QR code. *(NFC assessed and folded in 2026-08-14.)* All of these are one problem
       underneath — a physical marker resolving to an item — so build ONE
