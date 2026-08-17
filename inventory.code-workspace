@@ -1,0 +1,39 @@
+{
+	"folders": [
+		{
+			"path": "."
+		}
+	],
+	"settings": {
+		"java.compile.nullAnalysis.mode": "automatic"
+	},
+	"extensions": {
+		"recommendations": [
+			// AI pair programming
+			"anthropic.claude-code",
+			// Java reactor: language support, debug, test, dependency view (pack)
+			"vscjava.vscode-java-pack",
+			"vscjava.vscode-maven",
+			// Quarkus (properties, Qute templates, dev mode) + pom/yaml editing
+			"redhat.vscode-quarkus",
+			"redhat.vscode-xml",
+			"redhat.vscode-yaml",
+			// the web-app's Svelte islands
+			"svelte.svelte-vscode",
+			// the iOS app (SwiftUI sources typecheck here; builds via just)
+			"swiftlang.swift-vscode",
+			// the Android app, when its real v1 lands
+			"vscjava.vscode-gradle",
+			// the Justfile is the executor of record
+			"nefrob.vscode-just-syntax",
+			"tobiashochguertel.just-formatter",
+			// compose stack + the devcontainer
+			"ms-azuretools.vscode-containers",
+			"ms-vscode-remote.remote-containers",
+			// ci.yml / release.yml / devcontainer-image.yml
+			"github.vscode-github-actions",
+			// history spelunking across eight repos
+			"eamodio.gitlens"
+		]
+	}
+}
