@@ -423,6 +423,20 @@ rather than an emergency patch.
   explicitly OUT (they are functional artifacts with their own golden-file
   discipline).
 
+### Phase 19 — Maven artifact extraction: parent/api/impl release independently *(added 2026-08-17; STAGED, not scheduled — full plan in [MAVEN_RELEASES.md](MAVEN_RELEASES.md), which moves into this file as milestones when the work is picked up)*
+- Activates Phase 14's revisit clause (an external consumer of the jars now
+  exists by intent): inventory-parent, inventory-api, and inventory-impl
+  leave the reactor and its `${revision}`, gaining literal versions released
+  via maven-release-plugin; the four apps keep the tag→GHCR-images flow and
+  consume the released jars, pinned by a new `inventory-bom`.
+- inventory-impl becomes a **multi-module build released as ONE version**:
+  core (domain impls, InMemory twins, verticles, label/catalog machinery) +
+  `inventory-impl-pg` (Pg code + Liquibase changesets — the changelog then
+  ships in a versioned jar, retiring the Helm copy rule and Nomad checkout
+  mount). Snapshots → GitHub Packages; release destination (Central-public
+  vs GH-Packages-private) is a staged gate; groupId stays
+  `org.lawfulevil.inventory` (lawfulevil.org controlled).
+
 ## First milestone (Phase 1, implementable detail)
 
 1. **`inventory-api`** — de-codegen and extend:
