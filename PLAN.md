@@ -1349,7 +1349,12 @@ the native/Linux constraint applies only to the shipped binary, never to develop
   a future Zebra-class device. Open sub-question: whether ~18 mm QRs on 24 mm tape scan
   reliably enough, or labels need larger media (answered by the Phase 9 hardware smoke).
 - Deployment target among swarm/nomad/k8s (manifests kept portable until chosen).
-- Asset storage backend (object store vs. Postgres) — decided in Phase 3.
+- ~~Asset storage backend (object store vs. Postgres)~~ — decided at Phase 3
+  execution (fifth milestone): **Postgres bytea** — one datastore, one
+  backup/restore story. Reaffirmed 2026-08-15 (Phase 15 asset archival):
+  bytes stay transactional with the audit row; the escape hatch if files
+  ever outgrow photos is an object store behind the `AssetStore` seam,
+  never the bare filesystem.
 - ~~Long-term web UI framework/language~~ — decided 2026-08-07 (Web UI direction row):
   island architecture, Svelte islands, SvelteKit only at a majority-interactive tipping
   point. Remaining sub-unknown: none until an island exists; revisit after Phase 8.
