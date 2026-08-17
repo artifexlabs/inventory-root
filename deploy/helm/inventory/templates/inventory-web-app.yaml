@@ -1,0 +1,65 @@
+# The browser UI (native image): talks only to the gateway; the API token
+# lives in the server-side session, never the browser.
+apiVersion: v1
+kind: Service
+metadata:
+  name: inventory-web-app
+  labels:
+    {{- include "inventory.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.webApp.serviceType }}
+  selector:
+    app.kubernetes.io/name: inventory-web-app
+    app.kubernetes.io/instance: {{ .Release.Name }}
+  ports:
+    - name: http
+      port: 8082
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: inventory-web-app
+  labels:
+    {{- include "inventory.labels" . | nindent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: inventory-web-app
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: inventory-web-app
+        {{- include "inventory.labels" . | nindent 8 }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: inventory-web-app
+          image: {{ include "inventory.image" (dict "root" . "module" "inventory-web-app") }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          env:
+            - name: INVENTORY_WEB_API_URL
+              value: http://inventory-web-api:8081
+            - name: QUARKUS_PROFILE
+              value: prod
+            - name: INVENTORY_WEBAPP_SESSION_FILE
+              value: none
+          ports:
+            - name: http
+              containerPort: 8082
+          readinessProbe:
+            httpGet:
+              path: /q/health/ready
+              port: http
+            initialDelaySeconds: 2
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /q/health/live
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10

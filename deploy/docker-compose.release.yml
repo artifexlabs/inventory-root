@@ -1,8 +1,9 @@
 # Released-version overlay: swap locally built images for the versioned
-# images in the private GHCR namespace (PLAN.md Phase 14). Usage:
+# images in the private GHCR namespace (PLAN.md Phase 14). Usage (from the
+# workspace root):
 #
-#   INVENTORY_VERSION=1.2.3 docker compose \
-#     -f docker-compose.yml -f docker-compose.release.yml up -d
+#   INVENTORY_VERSION=1.2.3 docker compose --project-directory . \
+#     -f deploy/docker-compose.yml -f deploy/docker-compose.release.yml up -d
 #
 # `up` uses the named image when it exists locally and pulls it otherwise;
 # it never builds. `docker compose ... pull` first to pre-fetch. Requires

@@ -1348,7 +1348,15 @@ the native/Linux constraint applies only to the shipped binary, never to develop
   PT-P750W first (raster protocol over TCP 9100); ZPL remains the reference dialect for
   a future Zebra-class device. Open sub-question: whether ~18 mm QRs on 24 mm tape scan
   reliably enough, or labels need larger media (answered by the Phase 9 hardware smoke).
-- Deployment target among swarm/nomad/k8s (manifests kept portable until chosen).
+- ~~Deployment target among swarm/nomad/k8s (manifests kept portable until
+  chosen)~~ — DECIDED 2026-08-17: **"all three"** until another deployment
+  method is available. Everything deployment-shaped moved under `deploy/`:
+  compose (the executable reference, invoked with `--project-directory .`
+  from the root), a Nomad job (`deploy/nomad/`, one-allocation localhost
+  cluster), and a Helm chart (`deploy/helm/inventory/`, pod-IP members over
+  ClusterIP DNS discovery). Nomad + Helm are UNVALIDATED by decision (no
+  such cluster exists yet) but double-checked against the compose reference;
+  the never-publish-7800/15701 invariant is preserved in all three.
 - ~~Asset storage backend (object store vs. Postgres)~~ — decided at Phase 3
   execution (fifth milestone): **Postgres bytea** — one datastore, one
   backup/restore story. Reaffirmed 2026-08-15 (Phase 15 asset archival):

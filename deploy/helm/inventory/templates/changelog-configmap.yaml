@@ -1,0 +1,13 @@
+# The Liquibase changelogs, embedded from files/changelog/ (COPIES of
+# inventory-impl/src/main/resources/db — compose bind-mounts the originals,
+# but a cluster has no repo checkout). When a changeset is added under
+# inventory-impl, re-copy it here AND add its volume item in
+# migrate-job.yaml.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: inventory-changelog
+  labels:
+    {{- include "inventory.labels" . | nindent 4 }}
+data:
+{{ (.Files.Glob "files/changelog/*").AsConfig | indent 2 }}

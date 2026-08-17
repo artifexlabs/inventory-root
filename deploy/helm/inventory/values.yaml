@@ -1,0 +1,54 @@
+# Released images from the private GHCR namespace (PLAN.md Phase 14).
+image:
+  owner: mykelalvis
+  # the platform release: vX.Y.Z without the v
+  tag: latest
+  pullPolicy: IfNotPresent
+# The GHCR packages are PRIVATE: create a pull secret first, e.g.
+#   kubectl create secret docker-registry ghcr \
+#     --docker-server=ghcr.io --docker-username=<user> --docker-password=<read:packages token>
+imagePullSecrets:
+  - name: ghcr
+
+# Secrets land in one Secret object; CHANGE ALL FOUR outside dev.
+postgresPassword: inventory
+busToken: dev-bus-token
+adminEmail: admin@example.com
+adminPassword: change-me
+
+postgres:
+  storage: 5Gi
+  # empty = the cluster's default StorageClass
+  storageClassName: ""
+
+# The public base URL printed QR deep links carry (the web app's URL as the
+# phone will reach it).
+qrBaseUrl: http://localhost:8082
+
+# Label printer (consumed by inventory-server): log | brother-p750w | zebra-gk420t
+printer:
+  kind: log
+  host: ""
+  port: "9100"
+  tapeMm: "24"
+  format: "standard"
+
+webApp:
+  # LoadBalancer / NodePort / ClusterIP (port-forward for ClusterIP)
+  serviceType: ClusterIP
+
+webApi:
+  serviceType: ClusterIP
+
+exporter:
+  serviceType: ClusterIP
+
+ingress:
+  enabled: false
+  className: ""
+  # the browser UI
+  webHost: inventory.example.com
+  # the API (the iOS app's server URL); leave empty to skip the rule
+  apiHost: ""
+  annotations: {}
+  tls: []

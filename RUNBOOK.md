@@ -35,7 +35,7 @@ Configuration comes from the environment (or `.env`, which just auto-loads):
 ```sh
 mvn -pl inventory-server,inventory-web-api,inventory-exporter -am package -DskipTests   # JVM fast-jars (bus members)
 mvn -pl inventory-web-app -am package -DskipTests -Dnative -Dquarkus.native.container-build=true
-docker compose build
+docker compose --project-directory . -f deploy/docker-compose.yml build
 ```
 
 The three bus members (gateway, server, exporter) ship as JVM containers: the
@@ -48,10 +48,10 @@ required for label text rendering (quarkus-awt).
 ## Bring up / tear down
 
 ```sh
-docker compose up -d      # postgres -> liquibase migrate (runs, exits 0) -> the three apps
-docker compose ps         # all Up; migrate shows Exited (0)
-docker compose down       # stop stack, KEEP data
-docker compose down -v    # stop stack, DESTROY database volume
+docker compose --project-directory . -f deploy/docker-compose.yml up -d      # postgres -> liquibase migrate (runs, exits 0) -> the three apps
+docker compose --project-directory . -f deploy/docker-compose.yml ps         # all Up; migrate shows Exited (0)
+docker compose --project-directory . -f deploy/docker-compose.yml down       # stop stack, KEEP data
+docker compose --project-directory . -f deploy/docker-compose.yml down -v    # stop stack, DESTROY database volume
 ```
 
 Ports: web-api (gateway) 8081, webapp 8082, exporter 8083; inventory-server has no
@@ -82,35 +82,35 @@ round-trip on every build).
 ## Restart drills
 
 - **Warm** (process bounce, data intact):
-  `docker compose restart inventory-web-api` → smoke flow passes; previously created
+  `docker compose --project-directory . -f deploy/docker-compose.yml restart inventory-web-api` → smoke flow passes; previously created
   items still present.
 - **Cold** (full stack down, volume kept):
-  `docker compose down && docker compose up -d` → migrate re-runs idempotently
+  `docker compose --project-directory . -f deploy/docker-compose.yml down && docker compose --project-directory . -f deploy/docker-compose.yml up -d` → migrate re-runs idempotently
   (no-op), data intact.
-- **From empty**: `docker compose down -v && docker compose up -d` → Liquibase builds
+- **From empty**: `docker compose --project-directory . -f deploy/docker-compose.yml down -v && docker compose --project-directory . -f deploy/docker-compose.yml up -d` → Liquibase builds
   the schema from nothing; seeded admin can log in.
 
 ## Backup / restore
 
 ```sh
 # Backup (while running)
-docker compose exec postgres pg_dump -U inventory -Fc inventory > inventory-$(date +%F).dump
+docker compose --project-directory . -f deploy/docker-compose.yml exec postgres pg_dump -U inventory -Fc inventory > inventory-$(date +%F).dump
 # Restore (into a fresh volume)
-docker compose down -v && docker compose up -d postgres
-docker compose exec -T postgres pg_restore -U inventory -d inventory --clean --if-exists < inventory-YYYY-MM-DD.dump
-docker compose up -d
+docker compose --project-directory . -f deploy/docker-compose.yml down -v && docker compose --project-directory . -f deploy/docker-compose.yml up -d postgres
+docker compose --project-directory . -f deploy/docker-compose.yml exec -T postgres pg_restore -U inventory -d inventory --clean --if-exists < inventory-YYYY-MM-DD.dump
+docker compose --project-directory . -f deploy/docker-compose.yml up -d
 ```
 
 ## Migrations (day-2)
 
 Forward: add a changeset (with rollback) under
 `inventory-impl/src/main/resources/db/changeset/`, include it in
-`db/changelog-master.yaml`, then `docker compose run --rm migrate` (or just
+`db/changelog-master.yaml`, then `docker compose --project-directory . -f deploy/docker-compose.yml run --rm migrate` (or just
 `up -d` — migrate always runs before the server).
 
 Backward:
 ```sh
-docker compose run --rm migrate --url=jdbc:postgresql://postgres:5432/inventory \
+docker compose --project-directory . -f deploy/docker-compose.yml run --rm migrate --url=jdbc:postgresql://postgres:5432/inventory \
   --username=inventory --password=$POSTGRES_PASSWORD \
   --search-path=/liquibase/changelog --changelog-file=db/changelog-master.yaml \
   rollback-count 1
@@ -189,7 +189,7 @@ macOS CI runners are deliberately outside these recipes until distribution start
 ## The event-bus fabric (migrate_to_vertx_eb topology)
 
 The clustered Vert.x bus is now the deployment's spine, carrying two distinct
-kinds of traffic (see [DEPLOYMENT.md](DEPLOYMENT.md) for the full deploy method):
+kinds of traffic (see [deploy/DEPLOYMENT.md](deploy/DEPLOYMENT.md) for the full deploy method):
 
 1. **Request/reply envelopes** (`inventory.svc.*`): every HTTP request the
    gateway (`inventory-web-api`) authenticates becomes a `BusEnvelope` — action,
@@ -264,7 +264,7 @@ GHCR UI (user-account packages default private — check, don't assume).
 Running a released version (any machine with `docker login ghcr.io`):
 
 ```bash
-INVENTORY_VERSION=1.2.0 docker compose -f docker-compose.yml -f docker-compose.release.yml up -d
+INVENTORY_VERSION=1.2.0 docker compose --project-directory . -f deploy/docker-compose.yml -f deploy/docker-compose.release.yml up -d
 ```
 
 Rolling back a bad release: deploy the previous version with the overlay
@@ -286,5 +286,8 @@ versioning and signing, in their own future phases.
 
 ## Notes
 
-- Orchestrator target (swarm/nomad/k8s) still open; this compose file is the portable
-  reference deployment.
+- Orchestrator target decided 2026-08-17: "all three" until another method is
+  available. `deploy/docker-compose.yml` stays the executable reference; a
+  Nomad job (`deploy/nomad/`) and a Helm chart (`deploy/helm/inventory/`)
+  translate it — both unvalidated by decision until such a cluster exists
+  (see [deploy/DEPLOYMENT.md](deploy/DEPLOYMENT.md)).

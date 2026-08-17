@@ -32,6 +32,11 @@ android_app_dir := "inventory-mobile-apps/inventory-android-app"
 ios_scheme := env('INVENTORY_IOS_SCHEME', 'InventoryApp')
 ios_simulator := env('INVENTORY_IOS_SIMULATOR', 'iPhone 17')
 
+# Compose files live in deploy/; --project-directory keeps their relative
+# paths (build contexts, changelog mount), the root .env, and the project
+# name resolving from the workspace root exactly as before the move.
+compose := "docker compose --project-directory . -f deploy/docker-compose.yml"
+
 # List every task.
 default:
     @just --list --unsorted
@@ -69,7 +74,7 @@ natives: (native "inventory-web-app")
 # Container images from the built artifacts.
 [group('build')]
 images:
-    docker compose build
+    {{ compose }} build
 
 # Everything: fast-jars + natives, then images.
 [group('build')]
@@ -108,29 +113,29 @@ dev-webapp: _sync-libs
 # Start the stack: postgres -> liquibase migrate (exits 0) -> the three apps.
 [group('stack')]
 up:
-    docker compose up -d
+    {{ compose }} up -d
     @just ps
 
 # Service status (migrate correctly shows Exited (0)).
 [group('stack')]
 ps:
-    docker compose ps -a --format 'table {{{{.Service}}\t{{{{.State}}\t{{{{.Status}}'
+    {{ compose }} ps -a --format 'table {{{{.Service}}\t{{{{.State}}\t{{{{.Status}}'
 
 # Follow logs; `just logs inventory-web-api` for one service.
 [group('stack')]
 logs service="":
-    docker compose logs -f {{ service }}
+    {{ compose }} logs -f {{ service }}
 
 # Stop the stack, KEEP the database volume.
 [group('stack')]
 down:
-    docker compose down
+    {{ compose }} down
 
 # Stop the stack and DESTROY the database volume.
 [group('stack')]
 [confirm("This DESTROYS the database volume. Continue? (y/N)")]
 destroy:
-    docker compose down -v
+    {{ compose }} down -v
 
 # --- smoke (the standing check) ----------------------------------------------
 
@@ -171,7 +176,7 @@ smoke-fake-printer:
     set -euo pipefail
     echo "-> stack up with the fake printer (server pointed at it, not the real P750W)"
     INVENTORY_PRINTER=brother-p750w INVENTORY_PRINTER_HOST=fake-printer \
-      docker compose --profile fake-printer up -d
+      {{ compose }} --profile fake-printer up -d
     just _wait-ready
     TOKEN=$(curl -s -X POST {{ server_url }}/api/v1/auth/login \
       -H 'Content-Type: application/json' \
@@ -185,9 +190,9 @@ smoke-fake-printer:
     [ "$CODE" = "204" ] || { echo "FAIL: print-label returned $CODE"; exit 1; }
     echo "ok: print-label 204 against the fake printer"
     sleep 2
-    JOB=$(docker compose --profile fake-printer exec -T fake-printer sh -c 'ls -t /jobs 2>/dev/null | head -1')
+    JOB=$({{ compose }} --profile fake-printer exec -T fake-printer sh -c 'ls -t /jobs 2>/dev/null | head -1')
     [ -n "$JOB" ] || { echo "FAIL: no job captured by the fake printer"; exit 1; }
-    docker compose --profile fake-printer cp fake-printer:/jobs/$JOB /tmp/inventory-fake-printer-job.bin
+    {{ compose }} --profile fake-printer cp fake-printer:/jobs/$JOB /tmp/inventory-fake-printer-job.bin
     python3 - <<'PY'
     data = open('/tmp/inventory-fake-printer-job.bin', 'rb').read()
     assert len(data) > 102, f"job too short: {len(data)} bytes"
@@ -216,15 +221,15 @@ print-label id:
 # Warm: bounce the server process; data must survive.
 [group('drill')]
 drill-warm:
-    docker compose restart inventory-web-api
+    {{ compose }} restart inventory-web-api
     @just _wait-ready
     @just smoke
 
 # Cold: full stack down and up, volume kept; migrate re-runs idempotently.
 [group('drill')]
 drill-cold:
-    docker compose down
-    docker compose up -d
+    {{ compose }} down
+    {{ compose }} up -d
     @just _wait-ready
     @just smoke
 
@@ -232,8 +237,8 @@ drill-cold:
 [group('drill')]
 [confirm("This DESTROYS the database volume before the drill. Continue? (y/N)")]
 drill-empty:
-    docker compose down -v
-    docker compose up -d
+    {{ compose }} down -v
+    {{ compose }} up -d
     @just _wait-ready
     @just smoke
 
@@ -314,30 +319,30 @@ _ios-preflight:
 # pg_dump the running database (custom format).
 [group('day2')]
 backup file=("inventory-" + datetime("%F") + ".dump"):
-    docker compose exec postgres pg_dump -U inventory -Fc inventory > {{ file }}
+    {{ compose }} exec postgres pg_dump -U inventory -Fc inventory > {{ file }}
     @echo "backup written: {{ file }}"
 
 # Restore a dump into a FRESH volume, then start the stack.
 [group('day2')]
 [confirm("This DESTROYS the current database volume before restoring. Continue? (y/N)")]
 restore file:
-    docker compose down -v
-    docker compose up -d postgres
+    {{ compose }} down -v
+    {{ compose }} up -d postgres
     sleep 5
-    docker compose exec -T postgres pg_restore -U inventory -d inventory --clean --if-exists < {{ file }}
-    docker compose up -d
+    {{ compose }} exec -T postgres pg_restore -U inventory -d inventory --clean --if-exists < {{ file }}
+    {{ compose }} up -d
     @just ps
 
 # Apply pending Liquibase changesets (idempotent; also runs on every `just up`).
 [group('day2')]
 migrate:
-    docker compose run --rm migrate
+    {{ compose }} run --rm migrate
 
 # Roll back the last N changesets.
 [group('day2')]
 [confirm("Rolling back applied changesets. Continue? (y/N)")]
 rollback count="1":
-    docker compose run --rm migrate \
+    {{ compose }} run --rm migrate \
       --url=jdbc:postgresql://postgres:5432/inventory \
       --username=inventory --password={{ pg_password }} \
       --search-path=/liquibase/changelog --changelog-file=db/changelog-master.yaml \

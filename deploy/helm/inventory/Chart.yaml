@@ -1,0 +1,12 @@
+apiVersion: v2
+name: inventory
+description: >-
+  The inventory stack on Kubernetes: postgres, a Liquibase migrate hook, the
+  three clustered bus members (gateway, server, exporter — JVM images), and
+  the native web app. Reference chart added 2026-08-17; UNVALIDATED by
+  decision (no cluster available yet) — deploy/docker-compose.yml remains the
+  executable reference deployment.
+type: application
+version: 0.1.0
+# tracks the platform release being deployed (image tags come from values)
+appVersion: "0.0.1"

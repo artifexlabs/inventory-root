@@ -1,0 +1,129 @@
+# The worker host: owns storage, transactions, audit, printing. No published
+# HTTP beyond in-cluster health; all work arrives as bus envelopes carrying
+# the fabric token and the acting user's role.
+#
+# Cluster addressing in k8s: each member binds its POD IP (downward API) and
+# discovers peers through the three ClusterIP service names on JGroups :7800
+# — the compose static-IP scheme translated to stable DNS. 7800/15701 exist
+# only as ClusterIP ports: nothing routes them from outside the cluster, so
+# the never-publish invariant holds (bus membership is access).
+apiVersion: v1
+kind: Service
+metadata:
+  name: inventory-server
+  labels:
+    {{- include "inventory.labels" . | nindent 4 }}
+spec:
+  selector:
+    app.kubernetes.io/name: inventory-server
+    app.kubernetes.io/instance: {{ .Release.Name }}
+  ports:
+    - name: jgroups
+      port: 7800
+    - name: eventbus
+      port: 15701
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: inventory-server
+  labels:
+    {{- include "inventory.labels" . | nindent 4 }}
+spec:
+  replicas: 1
+  # single member identity: never two servers mid-rollout
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: inventory-server
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: inventory-server
+        {{- include "inventory.labels" . | nindent 8 }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: inventory-server
+          image: {{ include "inventory.image" (dict "root" . "module" "inventory-server") }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          env:
+            - name: POD_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+            - name: INVENTORY_STORAGE
+              value: pg
+            - name: QUARKUS_DATASOURCE_REACTIVE_URL
+              value: postgresql://postgres:5432/inventory
+            - name: QUARKUS_DATASOURCE_USERNAME
+              value: inventory
+            - name: QUARKUS_DATASOURCE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: inventory-secrets
+                  key: postgres-password
+            - name: QUARKUS_DEVSERVICES_ENABLED
+              value: "false"
+            - name: INVENTORY_BUS_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: inventory-secrets
+                  key: bus-token
+            - name: INVENTORY_ADMIN_EMAIL
+              valueFrom:
+                secretKeyRef:
+                  name: inventory-secrets
+                  key: admin-email
+            - name: INVENTORY_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: inventory-secrets
+                  key: admin-password
+            - name: INVENTORY_EVENTS_BUS
+              value: clustered
+            - name: INVENTORY_PRINTER
+              value: {{ .Values.printer.kind | quote }}
+            - name: INVENTORY_PRINTER_HOST
+              value: {{ .Values.printer.host | quote }}
+            - name: INVENTORY_PRINTER_PORT
+              value: {{ .Values.printer.port | quote }}
+            - name: INVENTORY_PRINTER_TAPE_MM
+              value: {{ .Values.printer.tapeMm | quote }}
+            - name: INVENTORY_PRINTER_FORMAT
+              value: {{ .Values.printer.format | quote }}
+            - name: QUARKUS_VERTX_CLUSTER_CLUSTERED
+              value: "true"
+            - name: QUARKUS_VERTX_CLUSTER_HOST
+              value: "$(POD_IP)"
+            - name: QUARKUS_VERTX_CLUSTER_PORT
+              value: "15701"
+            - name: JAVA_TOOL_OPTIONS
+              value: >-
+                -Djgroups.bind.address=$(POD_IP)
+                -Djgroups.tcpping.initial_hosts=inventory-server[7800],inventory-web-api-bus[7800],inventory-exporter-bus[7800]
+                -Djava.net.preferIPv4Stack=true
+          ports:
+            - name: health
+              containerPort: 8082
+            - name: jgroups
+              containerPort: 7800
+            - name: eventbus
+              containerPort: 15701
+          readinessProbe:
+            httpGet:
+              path: /q/health/ready
+              port: health
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /q/health/live
+              port: health
+            initialDelaySeconds: 20
+            periodSeconds: 10

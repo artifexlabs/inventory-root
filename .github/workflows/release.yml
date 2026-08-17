@@ -2,7 +2,7 @@
 # builds the whole reactor at that version and publishes container images to
 # the private GHCR namespace ghcr.io/<owner>/inventory-root/<module>.
 #
-# Images match what docker-compose.yml actually deploys: JVM images for the
+# Images match what deploy/docker-compose.yml actually deploys: JVM images for the
 # three bus members (the vertx-infinispan cluster manager is not yet proven
 # under GraalVM native) and a native image for inventory-web-app.
 #
@@ -102,7 +102,7 @@ jobs:
           Run this version (after \`docker login ghcr.io\`):
 
           \`\`\`
-          INVENTORY_VERSION=${VERSION} docker compose -f docker-compose.yml -f docker-compose.release.yml up -d
+          INVENTORY_VERSION=${VERSION} docker compose --project-directory . -f deploy/docker-compose.yml -f deploy/docker-compose.release.yml up -d
           \`\`\`
 
           Mobile apps release separately through their store tracks.

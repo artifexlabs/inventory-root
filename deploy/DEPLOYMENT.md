@@ -2,8 +2,28 @@
 
 *Written 2026-08-14 on the `migrate_to_vertx_eb` branch. This is the exact method
 for deploying the dev versions and the released versions of the stack. Companion
-to [RUNBOOK.md](RUNBOOK.md) (day-2 operations: smoke, drills, backup, migrations)
-and [VERTICLES.md](VERTICLES.md) (the architecture record).*
+to [RUNBOOK.md](../RUNBOOK.md) (day-2 operations: smoke, drills, backup, migrations)
+and [VERTICLES.md](../VERTICLES.md) (the architecture record).*
+
+## The deploy/ directory (layout since 2026-08-17)
+
+Everything deployment-shaped lives here; the decision on the old
+swarm/nomad/k8s unknown is **"all three"** until another deployment method
+is available:
+
+- `docker-compose.yml` + `docker-compose.release.yml` — the **executable
+  reference deployment** (everything below in this document). Invoke from
+  the workspace root with `--project-directory .` (the `just` recipes do):
+  relative paths in the files, the root `.env`, and the compose project name
+  all resolve there.
+- `nomad/inventory.nomad.hcl` — the Nomad reference job: the whole stack in
+  ONE allocation sharing a bridge netns (the localhost-cluster shape of the
+  two-process dev setup below). UNVALIDATED by decision — no Nomad cluster
+  exists yet; double-checked against the compose file.
+- `helm/inventory/` — the Kubernetes reference chart: pod-IP bus members
+  discovering through ClusterIP DNS, a Liquibase hook Job, postgres
+  StatefulSet. UNVALIDATED by decision — see its README for the changelog
+  copy rule and pull-secret setup.
 
 ## What gets deployed
 
@@ -107,13 +127,13 @@ just smoke                # login → CRUD → QR → print-label → BFF view; 
 just down                 # stop, KEEP data       (just destroy = confirm-gated down -v)
 ```
 
-This is the same `docker-compose.yml` a release runs — Postgres storage, the
+This is the same `deploy/docker-compose.yml` a release runs — Postgres storage, the
 internal cluster network with static member IPs (gateway 172.28.0.11, server
 .12, exporter .13), and the fabric token from `.env`. Verification beyond smoke:
 
 ```sh
 just logs inventory-server | grep ISPN000094    # cluster view should reach (3)
-docker compose exec postgres psql -U inventory -d inventory \
+docker compose --project-directory . -f deploy/docker-compose.yml exec postgres psql -U inventory -d inventory \
   -c 'select action, principal from audit_events order by seq desc limit 5'
 ```
 
@@ -171,8 +191,8 @@ INVENTORY_ADMIN_PASSWORD=<strong>
 INVENTORY_VERSION=<version>
 EOF
 
-docker compose -f docker-compose.yml -f docker-compose.release.yml pull
-docker compose -f docker-compose.yml -f docker-compose.release.yml up -d
+docker compose --project-directory . -f deploy/docker-compose.yml -f deploy/docker-compose.release.yml pull
+docker compose --project-directory . -f deploy/docker-compose.yml -f deploy/docker-compose.release.yml up -d
 just smoke                    # or the curl flow in RUNBOOK.md
 ```
 
@@ -186,8 +206,8 @@ starts, so schema upgrades are part of every deploy.
 # upgrade: bump the version, pull, re-up (data volume untouched)
 sed -i '' 's/^INVENTORY_VERSION=.*/INVENTORY_VERSION=0.2.0/' .env
 git checkout v0.2.0 && git submodule update --init inventory-impl
-docker compose -f docker-compose.yml -f docker-compose.release.yml pull
-docker compose -f docker-compose.yml -f docker-compose.release.yml up -d
+docker compose --project-directory . -f deploy/docker-compose.yml -f deploy/docker-compose.release.yml pull
+docker compose --project-directory . -f deploy/docker-compose.yml -f deploy/docker-compose.release.yml up -d
 
 # rollback: point INVENTORY_VERSION (and the checkout) back and re-up.
 # CAVEAT: images roll back freely; the DATABASE only rolls back across

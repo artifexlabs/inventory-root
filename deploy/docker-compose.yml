@@ -21,9 +21,16 @@
 # (INVENTORY_BUS_TOKEN) is defense in depth, not the perimeter. Never publish
 # 7800 or 15701.
 #
-# Bring-up:  docker compose up -d          (migrate runs Liquibase, then exits 0)
-# Smoke:     see RUNBOOK.md / DEPLOYMENT.md
-# Teardown:  docker compose down           (add -v to ALSO destroy the database)
+# This file lives in deploy/ but resolves its relative paths (build
+# contexts, the changelog mount) from the WORKSPACE ROOT: always invoke with
+# --project-directory pointing there (the just recipes do), which also keeps
+# the root .env feeding ${...} substitutions and the project name stable.
+#
+# Bring-up:  docker compose --project-directory . -f deploy/docker-compose.yml up -d
+#            (from the workspace root; migrate runs Liquibase, then exits 0)
+#            — or simply: just up
+# Smoke:     see RUNBOOK.md / deploy/DEPLOYMENT.md
+# Teardown:  just down                     (just destroy ALSO destroys the database)
 services:
 
   postgres:

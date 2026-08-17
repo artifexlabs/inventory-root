@@ -1,0 +1,22 @@
+The inventory stack is deploying.
+
+Watch it come up (migrate runs as a post-install/post-upgrade hook, then the
+three bus members must reach cluster view (3) — see the ISPN000094 log line):
+
+  kubectl get pods -l app.kubernetes.io/instance={{ .Release.Name }}
+  kubectl logs deploy/inventory-server | grep ISPN000094
+
+Reach the UI (seeded admin: see the inventory-secrets Secret):
+
+{{- if .Values.ingress.enabled }}
+  http://{{ .Values.ingress.webHost }}
+{{- else }}
+  kubectl port-forward svc/inventory-web-app 8082:8082   # browser: http://localhost:8082
+  kubectl port-forward svc/inventory-web-api 8081:8081   # API / smoke flow / iOS app
+{{- end }}
+
+Smoke (with the API reachable on :8081): run `just smoke` from a workspace
+checkout, or the curl flow in RUNBOOK.md.
+
+Remember: JGroups 7800 and bus 15701 are ClusterIP-only — never expose them.
+Bus membership is access.
