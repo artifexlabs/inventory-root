@@ -1550,6 +1550,10 @@ free. Item 4 is standalone.
       REFUSED at config time (fail fast) until the one-connection batch API
       exists, and the fix must include a buffer-flush/reset on startup so a
       stranded page can never ride out with a later job.
+      CONTROL (2026-08-18): a test label printed from Brother's own phone app
+      came out clean — hardware, 9 mm media, and the network path are all
+      exonerated, and the buffer is confirmed empty. The fault is entirely
+      ours.
       LESSON: the fake-printer sink structurally cannot catch this class of
       bug, because a byte sink accepts exactly the bytes the hardware
       discards. Print discipline applies.)* - This would allow Brother labels to 
