@@ -1596,9 +1596,12 @@ free. Item 4 is standalone.
       every page and silently giving back the leader saving; the encoder now
       sends the run length so the single full cut lands at the end. Exposed
       as `printBatch(requests, halfCutBetween)` (default true) and
-      `"halfCut"` on `POST /api/v1/labels/print-batch`. HARDWARE GATE STILL
-      OWED: four chained labels showing perforations between and ONE full cut
-      at the end.)* - This would allow Brother labels to 
+      `"halfCut"` on `POST /api/v1/labels/print-batch`. **HARDWARE GATE
+      PASSED 2026-08-18** (owner: "It appears to have worked perfectly"):
+      two 4-label runs on 9 mm tape, each one API call → one connection →
+      one printer job — four QRs on one strip, half-cut perforations
+      between, a single full cut at the end, one shared leader, nothing
+      stranded, no printer fault. Item 10 is DONE end to end.)* - This would allow Brother labels to 
       be more easily and efficiently utilized.  IT would also need an "extend the tape" button.
 - [x] **11. Create a small Brother QR Code** *(DONE 2026-08-15, built with 10 —
       all three planned changes landed: (a) the composer now draws the QR at
