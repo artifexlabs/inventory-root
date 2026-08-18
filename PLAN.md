@@ -1531,6 +1531,25 @@ free. Item 4 is standalone.
       whether a label printed, which is precisely why `printed: true`
       overstates what is known; honest reporting needs either a
       bidirectional channel or a weaker claim.
+      **PROVEN BY ULID 2026-08-18 — STRANDED DATA CONTAMINATES LATER JOBS,
+      AND SURVIVES A POWER CYCLE.** After the lockup and a physical power
+      cycle, a single unrelated unchained print emitted: ~1 in blank tape,
+      then a QR decoding to `01M0BASA6Z9DWRMPB79CC1TBRQ` — **chain4-1, page
+      one of the faulted run** — then a perforation, then the actually
+      requested label. Pages 2-4 of that run are gone for good. So the
+      failure model is now exact: page 1 of a chained run is rendered but
+      never fed/cut; each subsequent connection's `ESC @` destroys the page
+      before it; the survivor persists IN THE PRINTER across power-off and
+      is flushed ahead of the next job that ends `0x1A`. This also fully
+      explains the earlier run's "2 QRs with a perforation between them" —
+      it was [stranded page][perf][new label], never a working chain.
+      **This is a CORRECTNESS hazard, not just a reliability one**: a user
+      printing label X can receive a stale label for item Y physically
+      attached to it, and in an inventory system a QR that resolves to the
+      wrong item is worse than no label. Accordingly: `chain=true` should be
+      REFUSED at config time (fail fast) until the one-connection batch API
+      exists, and the fix must include a buffer-flush/reset on startup so a
+      stranded page can never ride out with a later job.
       LESSON: the fake-printer sink structurally cannot catch this class of
       bug, because a byte sink accepts exactly the bytes the hardware
       discards. Print discipline applies.)* - This would allow Brother labels to 
@@ -1552,8 +1571,14 @@ free. Item 4 is standalone.
       PRINT** at the predicted geometry — the hardware consumed exactly the
       54 raster lines the unit test pins (25-module bare-ULID QR at 2
       dots/module = 50 dots, + 4-dot margin), so the payload tier-down works
-      on metal. Phone-scan verification still OUTSTANDING (the dev server was
-      memory-backed and is gone; redo against the compose stack).
+      on metal. **SCAN GATE PASSED 2026-08-18**: two 9 mm codes were scanned
+      off the tape and decoded EXACTLY to their ULIDs
+      (`01M0BASA6Z9DWRMPB79CC1TBRQ`, `01M0BB77K7CV6ST9MREQBVEHY0`) — so the
+      smallest QR this system can print, 25 modules at 2 dots/module on
+      9 mm tape (~7 mm square), is reliably phone-readable. The
+      module-exact rendering + zero-margin decisions are hardware-vindicated.
+      Remaining nicety: an in-app scan through the iOS resolver (these were
+      decoded as raw text) against a persistent stack.
       Owner observation: "the qr codes are only codes of identifiers, not
       urls, but maybe that's just what we get" — correct as built, and forced
       by arithmetic at ECC Q. **Open improvement**: v2 (25 modules, the 9 mm
