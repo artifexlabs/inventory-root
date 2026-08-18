@@ -37,21 +37,50 @@ ios_simulator := env('INVENTORY_IOS_SIMULATOR', 'iPhone 17')
 # name resolving from the workspace root exactly as before the move.
 compose := "docker compose --project-directory . -f deploy/docker-compose.yml"
 
+# EVERY recipe that runs Maven tests must go through this.
+#
+# dotenv-load exports the workspace .env, which is what the STACK recipes want
+# — but unit tests assert UNCONFIGURED defaults, so that same .env breaks them:
+#   * OidcExchangeDisabledTest expects the exchange absent; an inherited
+#     exchange secret configures it (404 becomes 401).
+#   * QrAndLabelTest expects the default LOG printer, including that `feed`
+#     extends tape; .env points INVENTORY_PRINTER at real hardware, and a
+#     ZebraPrinter correctly refuses to feed die-cut media (204 becomes 503).
+# NOTE -DskipTests is NOT an escape: ibparent-root hard-pins
+# <skipTests>false</skipTests>, so tests run anyway — only
+# -Dmaven.test.skip=true genuinely skips them.
+test_env := "env -u QUARKUS_OIDC_CLIENT_ID -u QUARKUS_OIDC_CREDENTIALS_SECRET -u INVENTORY_OIDC_EXCHANGE_SECRET -u INVENTORY_PRINTER -u INVENTORY_PRINTER_HOST -u INVENTORY_PRINTER_PORT -u INVENTORY_PRINTER_TAPE_MM -u INVENTORY_PRINTER_FORMAT -u INVENTORY_PRINTER_CHAIN"
+
 # List every task.
 default:
     @just --list --unsorted
 
 # --- build -------------------------------------------------------------------
 
+# Scope is deliberately the aggregator's six modules. The parents are NOT
+# touched: since 2026-08-18 inventory-parent lives at ../inventory-parent and
+# artifex-maven-parent at ../artifex-parent, both consumed as RELEASED
+# artifacts from the repository rather than built here (MAVEN_RELEASES.md).
+# `mvn clean` only visits reactor modules, so they are out of reach by
+# construction — the explicit sweep below is likewise confined to this tree.
+# Deliberately NOT removed: src/main/web/node_modules (a dependency cache the
+# island build reuses) and Xcode DerivedData (outside the repo).
+#
+# Remove build output from every module in this workspace.
+[group('build')]
+clean:
+    @echo "-> delegating to Maven: mvn -B clean (the six workspace modules)"
+    mvn -B -ntp clean
+    # flatten's own clean goal handles these, but sweep any left by an
+    # interrupted build so a stale literal version can never be installed
+    @find . -mindepth 2 -maxdepth 2 -name '.flattened-pom.xml' -print -delete || true
+    @echo "clean: workspace modules only — ../inventory-parent and ../artifex-parent untouched"
+
 # Build + JVM-test every module (delegates to Maven).
 [group('build')]
 verify:
     @echo "-> delegating to Maven: mvn -B verify (all six modules, JVM tests)"
-    # dotenv-load exports the workspace .env (wanted for stack recipes), but the
-    # OIDC secrets must NOT reach unit tests: OidcExchangeDisabledTest asserts
-    # the UNCONFIGURED behavior, and an inherited exchange secret configures it.
-    env -u QUARKUS_OIDC_CLIENT_ID -u QUARKUS_OIDC_CREDENTIALS_SECRET -u INVENTORY_OIDC_EXCHANGE_SECRET \
-      mvn -B verify
+    {{ test_env }} mvn -B verify
 
 # Native executable for one module, compiled in the Linux builder container.
 [group('build')]
@@ -65,7 +94,7 @@ native module:
 [group('build')]
 fastjars:
     @echo "-> delegating to Maven: fast-jars for the bus members"
-    mvn -pl inventory-server,inventory-web-api,inventory-exporter -am package -DskipTests
+    {{ test_env }} mvn -pl inventory-server,inventory-web-api,inventory-exporter -am package -DskipTests
 
 # Native executables (web-app only in the deployed stack).
 [group('build')]
@@ -85,7 +114,7 @@ build-all: fastjars natives images
 # Dev-mode prerequisite: quarkus:dev resolves inventory-api/impl from ~/.m2.
 _sync-libs:
     @echo "-> delegating to Maven: installing inventory-api + inventory-impl to ~/.m2 (dev prerequisite)"
-    mvn -q -B -pl inventory-impl -am install -DskipTests
+    {{ test_env }} mvn -q -B -pl inventory-impl -am install -DskipTests
 
 # inventory-web-api in live-coding mode on :8081 (embedded bus workers on the
 # local bus — the full envelope path in one process; memory storage).

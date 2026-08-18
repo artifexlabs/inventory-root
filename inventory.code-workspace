@@ -8,9 +8,6 @@
 		},
 		{
 			"path": "../inventory-parent"
-		},
-		{
-			"path": "../iblogging-root"
 		}
 	],
 	"settings": {

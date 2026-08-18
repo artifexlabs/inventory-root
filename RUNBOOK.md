@@ -16,6 +16,7 @@ output.
 | Runbook section | Recipe(s) |
 |---|---|
 | Build native images | `just native <module>` · `just natives` · `just images` · `just build-all` |
+| Remove build output | `just clean` *(this workspace's six modules only — never `../inventory-parent` or `../artifex-parent`, which are consumed as released artifacts)* |
 | JVM build + tests | `just verify` *(delegates to `mvn -B verify`)* |
 | Bring up / tear down | `just up` · `just ps` · `just logs [service]` · `just down` · `just destroy` *(confirm-gated)* |
 | Smoke flow | `just smoke` *(asserts each step, ends `SMOKE PASS`)* |
@@ -79,6 +80,25 @@ curl -s -H "Authorization: Bearer $TOKEN" "localhost:8081/api/v1/views/items?que
 QR gate: decode `/tmp/qr.png` with zxing and confirm it encodes
 `$INVENTORY_QR_BASE_URL/i/$ID` (the JVM-side `QrAndLabelTest` checks the same
 round-trip on every build).
+
+**PRINT-DISCIPLINE WARNING (learned 2026-08-18):** the smoke's `print-label`
+step dispatches a REAL print. If `.env` points `INVENTORY_PRINTER` at hardware
+(as it does whenever you have been doing printer work), `just smoke` will
+consume a physical label — and at whatever `INVENTORY_PRINTER_FORMAT` says,
+which may not match the stock currently loaded. Bring the stack up with
+`INVENTORY_PRINTER=log` for routine verification:
+`INVENTORY_PRINTER=log docker compose --project-directory . -f deploy/docker-compose.yml up -d`
+(shell environment beats `.env` in compose substitution). The smoke is
+asserting that the label pipeline dispatches and audits — the log printer
+proves that without spending stock.
+
+Related trap on the build side: `just verify`, `just fastjars`, and
+`_sync-libs` all run Maven tests, and `dotenv-load` would otherwise feed them
+the same hardware config — so they go through the Justfile's `test_env`,
+which unsets the OIDC and printer variables. Unit tests must see the
+UNCONFIGURED defaults. Note `-DskipTests` does NOT skip anything here
+(ibparent-root hard-pins `<skipTests>false</skipTests>`); only
+`-Dmaven.test.skip=true` does.
 
 ## Restart drills
 
