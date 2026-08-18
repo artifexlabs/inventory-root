@@ -1509,9 +1509,28 @@ free. Item 4 is standalone.
       final page ending `0x1A` — i.e. LabelPrinter needs a batch/session
       concept, not N independent calls. Also revisit auto-cut
       (`ESC i M` 0x40), left ON, which fights the shared-leader goal.
-      MITIGATION MEANWHILE: `inventory.printer.chain` already defaults to
-      FALSE, so the default path is unaffected — treat `chain=true` as
-      unsafe until the session API lands.
+      **ESCALATED 2026-08-18 (second run): chain mode LOCKS UP THE PRINTER.**
+      A 4-chained-labels + feed run produced **ZERO** labels; the P750W went
+      to a blinking-power error state and needed a physical power cycle. All
+      five jobs had reported 204 / `printed: True` / 54 raster lines. This
+      confirms the mechanism: Brother raster treats a multi-page run as ONE
+      continuous stream (pages flagged first/subsequent, intermediates
+      ending `0x0C`, only the last ending `0x1A`), but each of our prints is
+      a SEPARATE TCP connection that announces "more pages coming" and then
+      hangs up — so the printer sits waiting for a continuation that never
+      arrives, buffer filling, until it faults. The earlier "lost labels"
+      were pages stranded mid-conversation, not dropped at random.
+      SEVERITY: `chain=true` is not merely lossy, it can require physical
+      intervention. MITIGATION MEANWHILE: `inventory.printer.chain` already
+      defaults to FALSE and the unchained path has printed reliably on
+      hardware all session — treat `chain=true` as UNSAFE until the session
+      API lands, and consider refusing the config outright until then.
+      TRANSPORT NOTE: the Brother's TCP 9100 appears UNIDIRECTIONAL — an
+      `ESC i S` status request returns nothing (Zebra's 9100 answers `~HI`
+      and `~HS` fine). So on this transport we cannot ask the Brother
+      whether a label printed, which is precisely why `printed: true`
+      overstates what is known; honest reporting needs either a
+      bidirectional channel or a weaker claim.
       LESSON: the fake-printer sink structurally cannot catch this class of
       bug, because a byte sink accepts exactly the bytes the hardware
       discards. Print discipline applies.)* - This would allow Brother labels to 
