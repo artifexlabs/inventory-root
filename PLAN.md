@@ -1490,20 +1490,31 @@ free. Item 4 is standalone.
       audits `label.feed`) → `POST /api/v1/labels/feed` → an "Extend tape"
       button beside Print label on the item page. Die-cut/absent printers
       answer 503 ("nothing to feed"); the encoder's feed job is a blank
-      8-line raster ending 0x1A. **HARDWARE 2026-08-18: NOT CONFIRMED —
-      REOPENED.** A chained run (2 labels + feed) produced NOTHING at print
-      time despite `printed: True` and 54 raster lines logged for each; the
-      output only appeared later, and then with a cut after the FIRST QR but
-      not the second — the opposite of chain printing's purpose. Prime
-      suspect, and a real design bug the fake-printer sink could never catch
-      (a byte sink accepts bytes the hardware then discards): every print
-      opens its OWN TCP connection beginning with `ESC @` (initialize), so
-      the next job almost certainly RESETS the printer and drops the page
-      the previous chained job left buffered. Genuine chain printing needs
-      all pages streamed down ONE connection with only the final page ending
-      `0x1A` — i.e. a batch/session API on LabelPrinter, not N independent
-      calls. Also revisit auto-cut (`ESC i M` 0x40), which is left ON and
-      fights the shared-leader goal. Print discipline applies.)* - This would allow Brother labels to 
+      8-line raster ending 0x1A. **HARDWARE 2026-08-18: BROKEN — REOPENED,
+      and it SILENTLY LOSES LABELS.** Measured facts: three print jobs were
+      sent (chained A, chained B, then one unchained) and only **TWO** QR
+      codes were ever produced; a deliberate 1.25-in tape feed afterwards
+      emitted no further code, proving the missing job was DESTROYED rather
+      than left buffered. Every one of the three reported HTTP 204 with
+      `printed: True` and logged its 54 raster lines — **so the success
+      signal is a lie**: `Tcp9100Transport.send` returning without throwing
+      only proves the bytes were accepted by the socket, never that a label
+      exists. Cut behaviour was inconsistent too (a cut after the first QR,
+      none after the second).
+      Root cause (strong): each print opens its OWN TCP connection beginning
+      with `ESC @` (initialize). Chain mode ends a job with `0x0C` (print
+      WITHOUT feeding) so the page is still in the printer when the next
+      connection's `ESC @` resets it and discards the page. Genuine chain
+      printing must stream every page down ONE connection with only the
+      final page ending `0x1A` — i.e. LabelPrinter needs a batch/session
+      concept, not N independent calls. Also revisit auto-cut
+      (`ESC i M` 0x40), left ON, which fights the shared-leader goal.
+      MITIGATION MEANWHILE: `inventory.printer.chain` already defaults to
+      FALSE, so the default path is unaffected — treat `chain=true` as
+      unsafe until the session API lands.
+      LESSON: the fake-printer sink structurally cannot catch this class of
+      bug, because a byte sink accepts exactly the bytes the hardware
+      discards. Print discipline applies.)* - This would allow Brother labels to 
       be more easily and efficiently utilized.  IT would also need an "extend the tape" button.
 - [x] **11. Create a small Brother QR Code** *(DONE 2026-08-15, built with 10 —
       all three planned changes landed: (a) the composer now draws the QR at
