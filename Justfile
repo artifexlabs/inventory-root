@@ -49,7 +49,7 @@ compose := "docker compose --project-directory . -f deploy/docker-compose.yml"
 # NOTE -DskipTests is NOT an escape: ibparent-root hard-pins
 # <skipTests>false</skipTests>, so tests run anyway — only
 # -Dmaven.test.skip=true genuinely skips them.
-test_env := "env -u QUARKUS_OIDC_CLIENT_ID -u QUARKUS_OIDC_CREDENTIALS_SECRET -u INVENTORY_OIDC_EXCHANGE_SECRET -u INVENTORY_PRINTER -u INVENTORY_PRINTER_HOST -u INVENTORY_PRINTER_PORT -u INVENTORY_PRINTER_TAPE_MM -u INVENTORY_PRINTER_FORMAT -u INVENTORY_PRINTER_CHAIN"
+test_env := "env -u QUARKUS_OIDC_CLIENT_ID -u QUARKUS_OIDC_CREDENTIALS_SECRET -u INVENTORY_OIDC_EXCHANGE_SECRET -u INVENTORY_PRINTER -u INVENTORY_PRINTER_HOST -u INVENTORY_PRINTER_PORT -u INVENTORY_PRINTER_TAPE_MM -u INVENTORY_PRINTER_FORMAT"
 
 # List every task.
 default:

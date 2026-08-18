@@ -1556,7 +1556,28 @@ free. Item 4 is standalone.
       ours.
       LESSON: the fake-printer sink structurally cannot catch this class of
       bug, because a byte sink accepts exactly the bytes the hardware
-      discards. Print discipline applies.)* - This would allow Brother labels to 
+      discards. Print discipline applies.
+      **FIXED 2026-08-18 (code; hardware re-verification still owed).**
+      Chaining is no longer a config flag — it is a property of a BATCH:
+      `LabelPrinter.printBatch(List<LabelRequest>)` with a default that
+      prints sequentially (right for die-cut Zebra and the log printer), and
+      a Brother implementation that composes every label up front and writes
+      the whole run down ONE connection. `BrotherRasterEncoder.encodeBatch`
+      emits the protocol correctly: invalidate + `ESC @` exactly ONCE, then
+      per page a print-information block whose starting-page byte is 0 for
+      the first and 1 for each continuation, with intermediate pages ending
+      `0x0C` and only the last ending `0x1A`. The advanced-mode chain bit
+      stays SET (never cleared-and-hang-up, the thing that wedged the
+      P750W), and `inventory.printer.chain` is GONE from both producers so
+      the footgun cannot be re-armed. A label that cannot be rendered fails
+      the whole batch rather than printing a partial strip. Reachable as
+      `labels.print-batch` (WRITE) and `POST /api/v1/labels/print-batch`
+      `{itemIds:[...], format?}`, audited as `label.print-batch`. Tests pin
+      the exact byte stream, that `ESC @` appears once per run, that a
+      single label is just a batch of one, and that a batch uses exactly ONE
+      socket connection. STILL OWED: the hardware run — print 4 chained
+      labels and confirm one shared leader, no cut between them, and no
+      stranded page afterwards.)* - This would allow Brother labels to 
       be more easily and efficiently utilized.  IT would also need an "extend the tape" button.
 - [x] **11. Create a small Brother QR Code** *(DONE 2026-08-15, built with 10 —
       all three planned changes landed: (a) the composer now draws the QR at
