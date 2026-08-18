@@ -1577,7 +1577,28 @@ free. Item 4 is standalone.
       single label is just a batch of one, and that a batch uses exactly ONE
       socket connection. STILL OWED: the hardware run — print 4 chained
       labels and confirm one shared leader, no cut between them, and no
-      stranded page afterwards.)* - This would allow Brother labels to 
+      stranded page afterwards.
+      **SPEC-VERIFIED 2026-08-18** against Brother's official Raster Command
+      Reference for PT-E550W/P750W/P710BT (extracted with poppler once it was
+      installed), which corrected the diagnosis: `ESC i K` bit 3 governs ONLY
+      what happens after the LAST page — 1 = "feeding and cutting ARE
+      performed after the last one", 0 = they are not. So clearing it never
+      enabled per-page chaining; it merely suppressed the final feed/cut,
+      which is why a page stayed stranded. The real bug was purely sending
+      `FF (0x0C)` — documented as "the end of pages OTHER than the last" —
+      and then closing the connection. Keeping bit 3 SET is therefore correct
+      for a finished run, for a different reason than first supposed.
+      **HALF CUT ADDED**: `ESC i K` bit 2 ("Half cut", explicitly independent
+      of chaining) perforates between labels so a run stays one strip that
+      tears apart by hand — the owner's ask, and the source of the
+      perforation observed during the broken run. It pairs with `ESC i A`
+      ("cut each * labels"), whose DEFAULT of 1 meant a batch was severing
+      every page and silently giving back the leader saving; the encoder now
+      sends the run length so the single full cut lands at the end. Exposed
+      as `printBatch(requests, halfCutBetween)` (default true) and
+      `"halfCut"` on `POST /api/v1/labels/print-batch`. HARDWARE GATE STILL
+      OWED: four chained labels showing perforations between and ONE full cut
+      at the end.)* - This would allow Brother labels to 
       be more easily and efficiently utilized.  IT would also need an "extend the tape" button.
 - [x] **11. Create a small Brother QR Code** *(DONE 2026-08-15, built with 10 —
       all three planned changes landed: (a) the composer now draws the QR at
