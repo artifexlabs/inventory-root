@@ -26,7 +26,7 @@ NOT chosen here — that remains an open unknown; nothing below forecloses any s
       *Verify:* Play Console dashboard loads with "All apps" and no outstanding
       verification banners.
 - [ ] **Bundle/application id reserved** (at first app creation, both stores):
-      suggest `org.lawfulevil.inventory.app`. No action possible until enrollments
+      suggest `io.artifexlabs.inventory.app`. No action possible until enrollments
       exist; record the chosen id here when taken.
 - [ ] **Android upload keystore** generated and backed up somewhere durable
       (`keytool -genkeypair ...`), Play App Signing enrolled at first upload. Do NOT

@@ -28,7 +28,7 @@ Maven artifacts via maven-release-plugin, with the apps consuming them.*
 | Extraction scope | **Full extraction at once**: inventory-parent, inventory-api, inventory-impl leave the reactor and `${revision}`, get literal release-plugin-managed versions; the four apps keep the Phase 14 tag→images flow and consume released jars | The real change is versioning/release process — the modules already live in separate git repos. Parent must come along: a released artifact cannot have a `${revision}`/SNAPSHOT parent. |
 | Snapshots | **GitHub Packages** (private) | Same credential family as GHCR; internal-only consumers. |
 | Releases | **STAGED — decide before the first release.** Central (permanently public; sources jars are mandatory, so every release is de-facto open-sourced under the existing Apache-2.0 headers, even with private repos) vs GitHub Packages (private; every consumer authenticates) | The trade-off is publicness, not mechanics — `distributionManagement` carries both targets either way. |
-| Namespace | **`org.lawfulevil.inventory` stays** | Owner controls lawfulevil.org, so Central namespace verification (DNS TXT) is available if Central is chosen. |
+| Namespace *(REVERSED 2026-08-18, owner-accepted)* | **`io.artifexlabs.inventory`** — was `org.lawfulevil.inventory`, renamed wholesale across every repo, package, and document | Collapses the release chain from TWO namespaces to ONE: artifexlabs.io verification is already required for artifex-maven-parent, so inventory now rides the same namespace instead of adding a second (lawfulevil.org) to verify and maintain. Breaking coordinate change, taken while the only consumers are in this workspace. |
 | Upstream parent *(added 2026-08-18)* | **`io.artifexlabs:artifex-maven-parent` sits above inventory-parent, and is RELEASED ENTIRELY INDEPENDENTLY of inventory** | A shared parent for artifexlabs.io projects. Inventory consumes it like any third-party parent — it is NOT part of inventory's release ceremony, and inventory's release train must simply *depend on an already-released version of it*. |
 
 ## What already happened (2026-08-18)
@@ -91,9 +91,10 @@ Maven artifacts via maven-release-plugin, with the apps consuming them.*
    *artifex releases on its own clock; inventory pins whatever version is
    current when it releases.*
 3. **If Central is chosen** at the release-destination gate, `io.artifexlabs`
-   needs its own namespace verification (artifexlabs.io DNS TXT), separate
-   from lawfulevil.org — and that is artifexlabs' problem to solve on its own
-   release track, not inventory's.
+   needs namespace verification (artifexlabs.io DNS TXT). Since the
+   2026-08-18 rename this is now the ONLY namespace in the chain — parent and
+   inventory alike — so one verification covers everything, rather than
+   artifexlabs.io plus a separate lawfulevil.org.
 4. **flatten-maven-plugin has no declared version anywhere in the chain**
    (ibparent manages none; artifex dropped it; inventory-parent only binds
    executions). Maven currently resolves it from metadata — it silently
@@ -160,7 +161,7 @@ SUPERPROJECT REACTOR (unchanged release model: v-tag -> GHCR images)
   (one shared Packages repo — GH Packages accepts any groupId under it);
   `<repository>` → the staged decision. When Central: the
   `central-publishing-maven-plugin` + GPG signing key, and one-time
-  namespace verification for org.lawfulevil.
+  namespace verification for io.artifexlabs.
 - **maven-release-plugin** per repo: `releaseProfiles=release` (rides
   ibparent's sources/javadoc profile), `tagNameFormat=v@{project.version}`,
   `autoVersionSubmodules=true` in inventory-impl-parent so both modules

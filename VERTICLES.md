@@ -35,7 +35,7 @@ survived that revision untouched — only the topology and the request path chan
   HTTP" below is still exactly why.
 - **The clustered Vert.x event bus carries two distinct kinds of traffic:**
   1. **Request/reply envelopes** on `inventory.svc.*` — the work itself. A
-     `BusEnvelope` (package `org.lawfulevil.inventory.api.bus`) names the action and
+     `BusEnvelope` (package `io.artifexlabs.inventory.api.bus`) names the action and
      its target, carries a typed payload, and binds the request to the acting user:
      their id and principal for attribution, their asserted roles, and the shared
      fabric token. Workers refuse a bad token (401) or a missing role (403) before
@@ -119,11 +119,11 @@ door is cost without function.
 ## Event contract
 
 *This section covers the FACT plane only. Its sibling — the request/reply envelope
-contract — lives in `org.lawfulevil.inventory.api.bus` (`BusEnvelope`, `BusActions`
+contract — lives in `io.artifexlabs.inventory.api.bus` (`BusEnvelope`, `BusActions`
 with its action→address→role registry, `Roles`, and the typed payload interfaces),
 documented in that package's `package-info.java`.*
 
-Package `org.lawfulevil.inventory.api.events` (new, in `inventory-api`):
+Package `io.artifexlabs.inventory.api.events` (new, in `inventory-api`):
 
 - **Payload**: the serialized `AuditEvent`, plus a version field —
   `{v: 1, id, ts, principal, action, targetId, details?}`. Additive changes only;
@@ -228,7 +228,7 @@ mandatory (no workers, no API), while `inventory.events.bus` still defaults to
 4. **HTTP consolidation** — **EXECUTED 2026-08-14.** REST resources,
    `InventoryBackendProducer`, `BearerTokenFilter`/`CurrentUser`, and OpenAPI moved
    from `inventory-server` into `inventory-web-api` (package
-   `org.lawfulevil.inventory.webapi`); the `ApiProxyResource` pass-through and its
+   `io.artifexlabs.inventory.webapi`); the `ApiProxyResource` pass-through and its
    HTTP stub died (nothing left to proxy); `ItemViewsResource` now composes its
    aggregates from the domain beans in-process instead of HTTP self-calls; webapp
    config unchanged (`inventory.web-api.url`); compose runs web-api with the pg +

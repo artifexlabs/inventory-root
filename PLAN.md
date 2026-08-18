@@ -440,13 +440,13 @@ rather than an emergency patch.
   ships in a versioned jar, retiring the Helm copy rule and Nomad checkout
   mount). Snapshots → GitHub Packages; release destination (Central-public
   vs GH-Packages-private) is a staged gate; groupId stays
-  `org.lawfulevil.inventory` (lawfulevil.org controlled).
+  `io.artifexlabs.inventory` (renamed from org.lawfulevil 2026-08-18; artifexlabs.io controlled).
 
 ## First milestone (Phase 1, implementable detail)
 
 1. **`inventory-api`** — de-codegen and extend:
    - Delete the `@ModuleGen` from `package-info.java`; remove `@ProxyGen`/`@VertxGen` from
-     [InventorySystem.java](inventory-api/src/main/java/org/lawfulevil/inventory/api/InventorySystem.java);
+     [InventorySystem.java](inventory-api/src/main/java/io/artifexlabs/inventory/api/InventorySystem.java);
      drop `vertx-codegen*`, `vertx-service-proxy`, `vertx-auth-*`, `vertx-mongo-client`,
      rx-java3 test deps from the pom.
    - `InventorySystem` methods return `CompletionStage<...>`; add `deleteItem`,
@@ -454,13 +454,13 @@ rather than an emergency patch.
    - Add interfaces: `Location` (name, lat/long), data-media modeling on `Item` (kind,
      mutability, archive), `AuditEvent`/`AuditSink`, `InventoryUser`/`TokenService`.
    - Extend `Item` with optional `description` and location reference; extend
-     [ItemFactory](inventory-api/src/main/java/org/lawfulevil/inventory/api/ItemFactory.java)
-     and [DefaultItem](inventory-api/src/main/java/org/lawfulevil/inventory/api/DefaultItem.java)
+     [ItemFactory](inventory-api/src/main/java/io/artifexlabs/inventory/api/ItemFactory.java)
+     and [DefaultItem](inventory-api/src/main/java/io/artifexlabs/inventory/api/DefaultItem.java)
      to match. The existing 5 round-trip tests are the regression base; grow them with the
      model.
 2. **`inventory-impl`** — revive:
    - New pom (parent `inventory-parent`); delete the stale pre-refactor
-     [ItemImpl.java](inventory-impl/src/main/java/org/lawfulevil/inventory/ItemImpl.java).
+     [ItemImpl.java](inventory-impl/src/main/java/io/artifexlabs/inventory/ItemImpl.java).
    - `PgInventorySystem` implementing `InventorySystem`: transactional writes, audit row
      per mutation, ULID generation on create.
    - Liquibase: `db/changelog-master.yaml` + initial changesets (items, containment,
@@ -604,7 +604,7 @@ original sketch, both recorded below):*
 1. **`inventory-webapp`** — now the browser-facing UI app (port 8082): the Qute
    templates, `PageResource`, the session cookie + `SessionStore` + `UserLookup`,
    **and the Google OIDC dance (`OidcLoginResource`)** all moved here verbatim,
-   package `org.lawfulevil.inventory.webapp` unchanged. *(Deviation 1: the original
+   package `io.artifexlabs.inventory.webapp` unchanged. *(Deviation 1: the original
    sketch kept the OIDC dance in web-api, but the dance is browser redirects that end
    in session-cookie creation — inseparable from the session tier without a cross-app
    handoff protocol. The exchange call itself still reaches inventory-server, through
@@ -613,7 +613,7 @@ original sketch, both recorded below):*
    talks only to web-api, and the API token lives in the server-side session, never
    the browser.
 2. **`inventory-web-api`** — now the pure web API tier: a single `ApiProxyResource`
-   (new package `org.lawfulevil.inventory.webapi`) transparently forwards the whole
+   (new package `io.artifexlabs.inventory.webapi`) transparently forwards the whole
    `/api/v1/*` surface — method, path, query, body, Authorization / Content-Type /
    X-Exchange-Secret / X-Filename headers — to inventory-server, and serves no HTML
    (any non-`/api/v1` path is 404). *(Deviation 2: rather than re-implementing
@@ -1389,7 +1389,7 @@ the native/Linux constraint applies only to the shipped binary, never to develop
   artifactId all renamed to `inventory-web-app`, matching the GitHub repo)*: the
   unhyphenated `inventory-webapp` GitHub URL is still a redirect to
   `inventory-web-api` — never push to it. The Java package
-  (`org.lawfulevil.inventory.webapp`) and the `inventory.webapp.*` config keys keep
+  (`io.artifexlabs.inventory.webapp`) and the `inventory.webapp.*` config keys keep
   the old spelling deliberately — renaming those is behavioral, not cosmetic.
   *(Bite recorded 2026-08-09: a stale pre-rename `inventory-webapp-*-runner` binary
   lingered in target/, and Dockerfile.native's `COPY target/*-runner` glob matched
