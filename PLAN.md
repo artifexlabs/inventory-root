@@ -1490,8 +1490,20 @@ free. Item 4 is standalone.
       audits `label.feed`) → `POST /api/v1/labels/feed` → an "Extend tape"
       button beside Print label on the item page. Die-cut/absent printers
       answer 503 ("nothing to feed"); the encoder's feed job is a blank
-      8-line raster ending 0x1A. HARDWARE-VERIFY with the next Brother
-      session — print discipline applies.)* - This would allow Brother labels to 
+      8-line raster ending 0x1A. **HARDWARE 2026-08-18: NOT CONFIRMED —
+      REOPENED.** A chained run (2 labels + feed) produced NOTHING at print
+      time despite `printed: True` and 54 raster lines logged for each; the
+      output only appeared later, and then with a cut after the FIRST QR but
+      not the second — the opposite of chain printing's purpose. Prime
+      suspect, and a real design bug the fake-printer sink could never catch
+      (a byte sink accepts bytes the hardware then discards): every print
+      opens its OWN TCP connection beginning with `ESC @` (initialize), so
+      the next job almost certainly RESETS the printer and drops the page
+      the previous chained job left buffered. Genuine chain printing needs
+      all pages streamed down ONE connection with only the final page ending
+      `0x1A` — i.e. a batch/session API on LabelPrinter, not N independent
+      calls. Also revisit auto-cut (`ESC i M` 0x40), which is left ON and
+      fights the shared-leader goal. Print discipline applies.)* - This would allow Brother labels to 
       be more easily and efficiently utilized.  IT would also need an "extend the tape" button.
 - [x] **11. Create a small Brother QR Code** *(DONE 2026-08-15, built with 10 —
       all three planned changes landed: (a) the composer now draws the QR at
@@ -1506,11 +1518,21 @@ free. Item 4 is standalone.
       resolves in the iOS scanner (built the same day) and the web `/i/{id}`
       route only via URL — a generic camera app shows the raw ULID, the
       accepted cost. The served `qr.png` keeps its margin (screen scanning
-      needs its own quiet zone). HARDWARE-VERIFY on 9 mm tape — ORDERED
-      2026-08-16, arriving Tuesday 2026-08-18; the smoke is one QR-only label
-      (bare-ULID v2 @ 2 dots/module, 50 dots exactly) phone-scanned via the
-      iOS app, plus a chain-print run to co-verify item 10 in the same
-      session. Print discipline applies.)* - Make the smallest possible QR code for an object
+      needs its own quiet zone). **HARDWARE 2026-08-18: 9 mm QR-only labels
+      PRINT** at the predicted geometry — the hardware consumed exactly the
+      54 raster lines the unit test pins (25-module bare-ULID QR at 2
+      dots/module = 50 dots, + 4-dot margin), so the payload tier-down works
+      on metal. Phone-scan verification still OUTSTANDING (the dev server was
+      memory-backed and is gone; redo against the compose stack).
+      Owner observation: "the qr codes are only codes of identifiers, not
+      urls, but maybe that's just what we get" — correct as built, and forced
+      by arithmetic at ECC Q. **Open improvement**: v2 (25 modules, the 9 mm
+      ceiling) holds 47 ALPHANUMERIC chars at ECC L, and QR alphanumeric mode
+      covers `0-9 A-Z $%*+-./:` — so an all-uppercase short URL like
+      `HTTP://SHORT.HOST/I/<26-char ULID>` (~43 chars) DOES fit 9 mm and
+      would restore generic-camera scanning. Needs a short host name and a
+      case-insensitive (or uppercase-aliased) `/i/` route. Print discipline
+      applies.)* - Make the smallest possible QR code for an object
       so that we could just attach the QR code to something very small.  The QR code should reference
       just like the original one, but it's possible that we could make one slightly smaller that
       the phone camera could still scan.  That will need experimentation.
@@ -1571,8 +1593,18 @@ free. Item 4 is standalone.
       `composeXLarge` 812×812, QR 2.5 in centered, full ULID on ONE mono line,
       type/qty as fixed columns, location/expiry/HEAVY/footer; devcontainer
       golden `golden-x-large-812x812.png` pinned, existing goldens regenerated
-      byte-identical. AWAITING HARDWARE SMOKE on the 4-in stock arriving
-      2026-08-21 — print only on explicit instruction)* -
+      byte-identical. **HARDWARE GATE PASSED 2026-08-18** on 4×4 die-cut
+      stock (owner: "the zebra label passes") — but only after forcing a
+      media recalibration: the printer still held its 2.25×4 calibration, so
+      the first attempt landed the artwork halfway down the label. `~JC` then
+      measured the true pitch at **846 dots** (4-in label + die-cut gap) and
+      the reprint registered correctly. Two follow-ups: (a) the layout leaves
+      obvious empty space on 4×4 — owner noted "plenty of room for additional
+      data", so the field set should grow (borrow from 2x-large's set);
+      (b) the encoder still emits `^LL812` against an 846-dot pitch — one
+      label registers fine on gap-sensing media, but watch for cumulative
+      drift across a long run and switch to the calibrated pitch if it
+      appears)* -
       a third named format beyond `standard` and `large`: a LARGER QR code and
       MORE data fields. The GK420t is a 4-inch (203 dpi) printer, so x-large
       means real 4-inch-wide die-cut stock — **4×4 in (~813×812 dots)** — where
