@@ -40,8 +40,9 @@ docker compose --project-directory . -f deploy/docker-compose.yml build
 
 The three bus members (gateway, server, exporter) ship as JVM containers: the
 vertx-infinispan cluster manager is the one component not yet proven under GraalVM
-native. The web-app stays native (`native` profile in `inventory-parent`;
-`-Dnative` activates it). The server's native Dockerfile still exists for a future
+native. The web-app stays native (`native` profile — since 2026-08-18 it lives
+in `io.artifexlabs:artifex-maven-parent`, the new grandparent, not
+`inventory-parent`; `-Dnative` activates it). The server's native Dockerfile still exists for a future
 single-process/native experiment and installs `fontconfig` + `dejavu-sans-fonts` —
 required for label text rendering (quarkus-awt).
 

@@ -4,9 +4,6 @@
 [submodule "inventory-impl"]
 	path = inventory-impl
 	url = git@github.com:mykelalvis/inventory-impl.git
-[submodule "inventory-parent"]
-	path = inventory-parent
-	url = git@github.com:mykelalvis/inventory-parent.git
 [submodule "inventory-server"]
 	path = inventory-server
 	url = git@github.com:mykelalvis/inventory-server.git

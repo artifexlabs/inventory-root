@@ -121,7 +121,7 @@ should mean investing in some of this, not letting them stay a bare name+pin.
 
 | Module | Role |
 |---|---|
-| [inventory-parent/](inventory-parent/) | Parent pom: imports Quarkus BOM, plugin/dependency management, shared config. Still parents off `ibparent`. |
+| `inventory-parent` *(RELOCATED 2026-08-18 to `../inventory-parent`, beside this workspace — no longer a submodule or reactor module)* | Parent pom: `${revision}`/`${inventory.version}`, inventory dependencyManagement, flatten executions. Now parents off **`io.artifexlabs:artifex-maven-parent`** (which owns the Quarkus BOM import, the `native` profile, flatten config, and shared build properties, and itself parents off `ibparent`). The six modules pin it by LITERAL version — see [MAVEN_RELEASES.md](MAVEN_RELEASES.md). |
 | [inventory-api/](inventory-api/) | Domain model, service interfaces, JSON wire contracts, audit/auth/user interfaces, constants. Depends on `vertx-core` only for `JsonObject`/`JsonArray`. |
 | [inventory-impl/](inventory-impl/) | Default implementations: Postgres repositories, transactional `InventorySystem`, audit sink, Liquibase changelogs. CDI beans, minimal Quarkus coupling. |
 | [inventory-server/](inventory-server/) | **PARKED 2026-08-14** (HTTP consolidation, [VERTICLES.md](VERTICLES.md)): its REST surface, backend wiring, and OpenAPI moved into `inventory-web-api`; the module is out of the reactor and compose. History and code remain in its repo, tagged `before-remove-inventory-server`. |
@@ -257,7 +257,12 @@ unknown.*
 - **CI dependency — RESOLVED 2026-08-13**: `ibparent` 112 was released to Maven
   Central; `inventory-parent` now parents off the released `112` (was
   `112-SNAPSHOT`), so CI resolves the whole parent chain remotely. The full local
-  `mvn verify` and CI both pass against it.
+  `mvn verify` and CI both pass against it. *(SUPERSEDED 2026-08-18:
+  `inventory-parent` now parents off `io.artifexlabs:artifex-maven-parent`,
+  which parents off ibparent 112. Since neither artifex-maven-parent nor the
+  relocated inventory-parent is published yet, **CI cannot resolve the parent
+  chain until they are** — local builds work only from `~/.m2`. Tracked as the
+  urgent step 0 in [MAVEN_RELEASES.md](MAVEN_RELEASES.md).)*
 - **CI blocker #2 — private-submodule checkout, RESOLVED 2026-08-13**: with the
   parent resolvable, CI surfaced the next failure: all `inventory-*` repos are
   private, and the workflow's `GITHUB_TOKEN` only reaches `inventory-root`, so

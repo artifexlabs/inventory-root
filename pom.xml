@@ -9,7 +9,6 @@
   <name>inventory-aggregator</name>
   <description>Untracked local aggregator for the inventory workspace</description>
   <modules>
-    <module>inventory-parent</module>
     <module>inventory-api</module>
     <module>inventory-impl</module>
     <!-- inventory-server: restored as the event-bus worker host — the domain

@@ -2,8 +2,18 @@
 
 *Written 2026-08-17 (decisions taken the same day). This is a STAGING
 document, the [UPC_CODE.md] lifecycle: when the work is scheduled it moves
-into [PLAN.md](PLAN.md) as a milestone (or several) and this file retires.
-Nothing in the build changes until then.*
+into [PLAN.md](PLAN.md) as a milestone (or several) and this file retires.*
+
+> **PARTIALLY EXECUTED 2026-08-18 — out of the staged order.** The owner
+> moved `inventory-parent` OUT of the workspace (it now lives beside it at
+> `../inventory-parent`, its own repo), removed it from the aggregator and
+> from `.gitmodules`, and re-parented it onto
+> **`io.artifexlabs:artifex-maven-parent`**. That forced step 2's literal
+> parent versions immediately (see "What already happened" below): a
+> property-valued parent version resolves ONLY through `<relativePath>`, so
+> the moment the parent left the tree, all six modules failed with
+> `Non-resolvable parent POM ... inventory-parent:pom:${revision}`. Steps 1,
+> 3, and 4 remain unstarted.
 
 *This activates the "revisit" clause of the Phase 14 decision ("no Maven
 artifact repository is needed — revisit only if an external build ever
@@ -19,6 +29,78 @@ Maven artifacts via maven-release-plugin, with the apps consuming them.*
 | Snapshots | **GitHub Packages** (private) | Same credential family as GHCR; internal-only consumers. |
 | Releases | **STAGED — decide before the first release.** Central (permanently public; sources jars are mandatory, so every release is de-facto open-sourced under the existing Apache-2.0 headers, even with private repos) vs GitHub Packages (private; every consumer authenticates) | The trade-off is publicness, not mechanics — `distributionManagement` carries both targets either way. |
 | Namespace | **`org.lawfulevil.inventory` stays** | Owner controls lawfulevil.org, so Central namespace verification (DNS TXT) is available if Central is chosen. |
+| Upstream parent *(added 2026-08-18)* | **`io.artifexlabs:artifex-maven-parent` sits above inventory-parent, and is RELEASED ENTIRELY INDEPENDENTLY of inventory** | A shared parent for artifexlabs.io projects. Inventory consumes it like any third-party parent — it is NOT part of inventory's release ceremony, and inventory's release train must simply *depend on an already-released version of it*. |
+
+## What already happened (2026-08-18)
+
+- `inventory-parent` relocated to `../inventory-parent` (sibling of this
+  workspace, still its own git repo); dropped from the aggregator's
+  `<modules>` and from `.gitmodules`. It is no longer a submodule of
+  inventory-root.
+- Its parent is now `io.artifexlabs:artifex-maven-parent:1-SNAPSHOT`
+  (was `org.infrastructurebuilder:ibparent:112`, which artifex now parents
+  off instead).
+- **Config split**: artifex-maven-parent took over the Quarkus BOM import,
+  the `native` profile, flatten's *configuration*
+  (`resolveCiFriendliesOnly` / `updatePomFile`), and the shared build
+  properties. inventory-parent kept `${revision}` / `${inventory.version}`,
+  the inventory dependencyManagement, and flatten's *executions*.
+- **The six modules now carry a LITERAL parent version** —
+  `<version>0.0.1-SNAPSHOT</version>` with `<relativePath/>` — plus their
+  own `<version>${revision}</version>`, which they previously inherited.
+  Both halves are load-bearing: literal is the only form resolvable from a
+  repository, and the restored own-version is what keeps Phase 14's
+  `mvn -Drevision=X.Y.Z` versioning the platform (verified: bare →
+  `0.0.1-SNAPSHOT`, `-Drevision=9.9.9-scratch` → `9.9.9-scratch`).
+- **Each module also had to define `<revision>` locally.** Restoring
+  `<version>${revision}</version>` alone broke every Quarkus module with
+  `UnresolvedVersionException: Failed to resolve version '${revision}'`:
+  Quarkus's bootstrap builds its workspace model from RAW poms, and once the
+  pom defining `${revision}` sits outside the workspace, Quarkus has nowhere
+  to interpolate it from. Maven itself was fine — this is a Quarkus
+  workspace-discovery constraint, and it applies to EVERY module in the
+  reactor (fixing only the failing one just moved the error to the next
+  module). The standard workaround is a local
+  `<properties><revision>0.0.1-SNAPSHOT</revision></properties>` in each
+  module; `-Drevision=X.Y.Z` still overrides it, since command-line
+  properties beat pom properties.
+- **Consequence — a per-release chore**: every future inventory-parent
+  version bump now requires editing that literal `<parent><version>` in all
+  six modules, and the default `<revision>` now appears in seven poms
+  (parent + six). That is the "multi-release ceremony" cost this document
+  already recorded, arriving early. The BOM step (staged step 3) is what
+  eventually tames it.
+- **Local prerequisite**: `../artifex-parent` and `../inventory-parent` must
+  be `mvn install`ed (or resolvable from a repository) before this reactor
+  builds. CI cannot build inventory until artifex-maven-parent and
+  inventory-parent are published somewhere it can reach — see Blockers.
+
+## Blockers this created
+
+1. **CI is not yet satisfiable.** ci.yml checks out inventory-root plus its
+   submodules; inventory-parent is no longer among them and
+   artifex-maven-parent never was. Until both are published (GitHub Packages
+   is the natural first home) or vendored into the checkout, a clean-clone
+   build cannot resolve its parents. Local builds work only because both are
+   installed in `~/.m2`.
+2. **artifex-maven-parent is `1-SNAPSHOT` and unpublished.** Inventory can
+   develop against a SNAPSHOT parent, but the moment inventory-parent itself
+   is released, it must point at a **released** artifex version — a released
+   artifact cannot have a SNAPSHOT parent. Since artifex releases
+   independently, this is a scheduling dependency, not a shared ceremony:
+   *artifex releases on its own clock; inventory pins whatever version is
+   current when it releases.*
+3. **If Central is chosen** at the release-destination gate, `io.artifexlabs`
+   needs its own namespace verification (artifexlabs.io DNS TXT), separate
+   from lawfulevil.org — and that is artifexlabs' problem to solve on its own
+   release track, not inventory's.
+4. **flatten-maven-plugin has no declared version anywhere in the chain**
+   (ibparent manages none; artifex dropped it; inventory-parent only binds
+   executions). Maven currently resolves it from metadata — it silently
+   picked 1.8.0 on 2026-08-18 — so builds work but are not reproducible: a
+   future release would change the build with no commit. Left alone per
+   owner instruction ("unless it actually breaks something"); pinning it in
+   artifex's `<pluginManagement>` is the fix when it matters.
 
 ## Grounding facts (verified 2026-08-17)
 
@@ -38,8 +120,17 @@ Maven artifacts via maven-release-plugin, with the apps consuming them.*
 ## Target architecture
 
 ```
+UPSTREAM, RELEASED ON ITS OWN CLOCK (not part of inventory's ceremony)
+  io.artifexlabs:artifex-maven-parent
+                            Quarkus BOM import, native profile, flatten
+                            CONFIG, shared build properties; parents off
+                            ibparent. Inventory pins a RELEASED version of
+                            it before inventory-parent can itself release.
+
 RELEASED ARTIFACTS (maven-release-plugin, literal versions)
-  inventory-parent          shared config; gains distributionManagement
+  inventory-parent          ${revision}/${inventory.version}, inventory
+                            dependencyManagement, flatten EXECUTIONS;
+                            gains distributionManagement
   inventory-api             domain contracts
   inventory-impl-parent     aggregator releasing BOTH modules as one version:
     inventory-impl            core: domain impls, InMemory twins, bus
@@ -107,12 +198,19 @@ SUPERPROJECT REACTOR (unchanged release model: v-tag -> GHCR images)
 
 ## Staged execution steps (each a milestone-sized chunk when scheduled)
 
+0. **URGENT, created by the 2026-08-18 move: make CI satisfiable again.**
+   Publish artifex-maven-parent and inventory-parent as SNAPSHOTs to GitHub
+   Packages (and add the `settings.xml` server entry to ci.yml and the
+   devcontainer), or CI stays broken while local builds pass. This is now
+   the true first step — it was implied by step 2 but is no longer optional.
 1. **Impl goes multi-module INSIDE the current reactor.** No release
    semantics yet: `inventory-impl-parent` + core + `-pg`, consumers'
    dependencies rewired, full reactor + CI green. Lowest-risk step,
    immediately useful (native web-app dependency hygiene, changelog-in-jar
    becomes buildable).
-2. **Release wiring.** inventory-parent/api/impl move to literal versions;
+2. **Release wiring.** *(inventory-parent's half is DONE 2026-08-18: it is
+   out of the reactor with literal parent versions in the six modules.)*
+   Remaining: api/impl move to literal versions;
    distributionManagement + release-plugin config; first SNAPSHOT deploys
    to GH Packages; superproject aggregator, Justfile, ci.yml shrink to the
    apps consuming coordinates instead of reactor paths.
