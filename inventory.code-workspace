@@ -8,6 +8,12 @@
 		},
 		{
 			"path": "../inventory-parent"
+		},
+		{
+			"path": "../inventory-api"
+		},
+		{
+			"path": "../inventory-impl"
 		}
 	],
 	"settings": {

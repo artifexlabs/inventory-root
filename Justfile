@@ -37,6 +37,12 @@ ios_simulator := env('INVENTORY_IOS_SIMULATOR', 'iPhone 17')
 # name resolving from the workspace root exactly as before the move.
 compose := "docker compose --project-directory . -f deploy/docker-compose.yml"
 
+# The extracted library repos (MAVEN_RELEASES.md), built IN THIS ORDER before
+# the reactor: parent -> api -> impl. They live beside the workspace as their
+# own repos (artifexlabs org). artifex-maven-parent is NOT here on purpose —
+# it releases on its own clock and is consumed from ~/.m2 / a repository.
+lib_dirs := "../inventory-parent ../inventory-api ../inventory-impl"
+
 # EVERY recipe that runs Maven tests must go through this.
 #
 # dotenv-load exports the workspace .env, which is what the STACK recipes want
@@ -57,34 +63,55 @@ default:
 
 # --- build -------------------------------------------------------------------
 
-# Scope is deliberately the aggregator's six modules. The parents are NOT
-# touched: since 2026-08-18 inventory-parent lives at ../inventory-parent and
-# artifex-maven-parent at ../artifex-parent, both consumed as RELEASED
-# artifacts from the repository rather than built here (MAVEN_RELEASES.md).
-# `mvn clean` only visits reactor modules, so they are out of reach by
-# construction — the explicit sweep below is likewise confined to this tree.
+# Scope is deliberately the aggregator's four app modules. `mvn clean` only
+# visits reactor modules, so the peer repos are out of reach by construction —
+# the explicit sweep below is likewise confined to this tree; use `clean-libs`
+# for the extracted library repos. artifex-parent is NEVER touched here.
 # Deliberately NOT removed: src/main/web/node_modules (a dependency cache the
 # island build reuses) and Xcode DerivedData (outside the repo).
 #
 # Remove build output from every module in this workspace.
 [group('build')]
 clean:
-    @echo "-> delegating to Maven: mvn -B clean (the six workspace modules)"
+    @echo "-> delegating to Maven: mvn -B clean (the four workspace app modules)"
     mvn -B -ntp clean
     # flatten's own clean goal handles these, but sweep any left by an
     # interrupted build so a stale literal version can never be installed
     @find . -mindepth 2 -maxdepth 2 -name '.flattened-pom.xml' -print -delete || true
-    @echo "clean: workspace modules only — ../inventory-parent and ../artifex-parent untouched"
+    @echo "clean: workspace modules only — peer lib repos untouched (use clean-libs)"
 
-# Build + JVM-test every module (delegates to Maven).
+# Remove build output from the three extracted lib repos (NOT artifex-parent).
 [group('build')]
-verify:
-    @echo "-> delegating to Maven: mvn -B verify (all six modules, JVM tests)"
+clean-libs:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    for d in {{ lib_dirs }}; do
+      echo "-> delegating to Maven: mvn -B clean in $d"
+      mvn -B -ntp -f "$d/pom.xml" clean
+    done
+    echo "clean-libs: {{ lib_dirs }} cleaned — ../artifex-parent untouched"
+
+# Build + test + install the lib repos IN ORDER: parent -> api -> impl.
+# Everything downstream resolves them from ~/.m2, so this must run before
+# the reactor whenever a lib changed.
+[group('build')]
+libs:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    for d in {{ lib_dirs }}; do
+      echo "-> delegating to Maven: mvn -B install in $d (with tests)"
+      {{ test_env }} mvn -B -ntp -f "$d/pom.xml" install
+    done
+
+# Build + JVM-test everything: the lib repos in order, then the app reactor.
+[group('build')]
+verify: libs
+    @echo "-> delegating to Maven: mvn -B verify (the four app modules, JVM tests)"
     {{ test_env }} mvn -B verify
 
 # Native executable for one module, compiled in the Linux builder container.
 [group('build')]
-native module:
+native module: _sync-libs
     @echo "-> delegating to Maven: native build of {{ module }} ({{ native_flags }})"
     mvn -pl {{ module }} -am package {{ native_flags }}
 
@@ -92,7 +119,7 @@ native module:
 # vertx-infinispan cluster manager is not yet proven under GraalVM native,
 # so cluster members ship as JVM containers.
 [group('build')]
-fastjars:
+fastjars: _sync-libs
     @echo "-> delegating to Maven: fast-jars for the bus members"
     {{ test_env }} mvn -pl inventory-server,inventory-web-api,inventory-exporter -am package -DskipTests
 
@@ -111,10 +138,17 @@ build-all: fastjars natives images
 
 # --- dev (live-coding; one terminal per tier) --------------------------------
 
-# Dev-mode prerequisite: quarkus:dev resolves inventory-api/impl from ~/.m2.
+# Fast lib install (no tests) — the dev/packaging prerequisite: everything in
+# this reactor resolves inventory-parent/api/impl from ~/.m2. Use `just libs`
+# for the tested variant. NOTE -Dmaven.test.skip=true, not -DskipTests, which
+# ibparent hard-pins off.
 _sync-libs:
-    @echo "-> delegating to Maven: installing inventory-api + inventory-impl to ~/.m2 (dev prerequisite)"
-    {{ test_env }} mvn -q -B -pl inventory-impl -am install -DskipTests
+    #!/usr/bin/env bash
+    set -euo pipefail
+    for d in {{ lib_dirs }}; do
+      echo "-> delegating to Maven: mvn -B install in $d (tests skipped)"
+      {{ test_env }} mvn -q -B -ntp -f "$d/pom.xml" install -Dmaven.test.skip=true
+    done
 
 # inventory-web-api in live-coding mode on :8081 (embedded bus workers on the
 # local bus — the full envelope path in one process; memory storage).
@@ -396,7 +430,8 @@ release-plan version:
 [group('release')]
 release version:
     @just _release-checks {{ version }}
-    @echo "-> delegating to Maven: full verify at -Drevision={{ version }}"
+    @just libs
+    @echo "-> delegating to Maven: app-reactor verify at -Drevision={{ version }} (libs keep their own literal versions)"
     env -u QUARKUS_OIDC_CLIENT_ID -u QUARKUS_OIDC_CREDENTIALS_SECRET -u INVENTORY_OIDC_EXCHANGE_SECRET \
       mvn -B verify -Drevision={{ version }}
     @just _release-tags {{ version }}

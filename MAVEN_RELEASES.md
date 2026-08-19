@@ -12,8 +12,15 @@ into [PLAN.md](PLAN.md) as a milestone (or several) and this file retires.*
 > parent versions immediately (see "What already happened" below): a
 > property-valued parent version resolves ONLY through `<relativePath>`, so
 > the moment the parent left the tree, all six modules failed with
-> `Non-resolvable parent POM ... inventory-parent:pom:${revision}`. Steps 1,
-> 3, and 4 remain unstarted.
+> `Non-resolvable parent POM ... inventory-parent:pom:${revision}`.
+>
+> **FURTHER EXECUTED 2026-08-19.** inventory-api and inventory-impl followed
+> the parent out (see "What already happened 2026-08-19" below): out of the
+> reactor and `.gitmodules`, re-homed as fresh repos in the **artifexlabs**
+> GitHub org, literal versions everywhere. Step 2 is now essentially done
+> except publishing wiring; steps 1, 3, and 4 remain unstarted, and step 1
+> (the impl core/-pg split) now happens inside the impl repo rather than
+> inside this reactor.
 
 *This activates the "revisit" clause of the Phase 14 decision ("no Maven
 artifact repository is needed — revisit only if an external build ever
@@ -75,21 +82,59 @@ Maven artifacts via maven-release-plugin, with the apps consuming them.*
   builds. CI cannot build inventory until artifex-maven-parent and
   inventory-parent are published somewhere it can reach — see Blockers.
 
+## What already happened (2026-08-19)
+
+- **inventory-api and inventory-impl extracted**: removed from the
+  aggregator's `<modules>`, from `.gitmodules`, and from the workspace tree;
+  they now live at `../inventory-api` and `../inventory-impl` beside
+  `../inventory-parent` (VS Code multi-root folders in
+  `inventory.code-workspace` replace the old submodule ergonomics — this
+  supersedes the "submodules stay in the workspace" line under Target
+  architecture).
+- **All three repos re-homed to the artifexlabs GitHub org as FRESH repos**:
+  the owner deleted each `.git` and re-established the current revision as a
+  new first commit (`git@github.com:artifexlabs/inventory-{parent,api,impl}.git`).
+  Pre-extraction history survives only in the old `mykelalvis` org repos —
+  keep those archived, not deleted. git-flow (git-flow-next) initialized in
+  each: `main` as the main branch, `develop` as the development branch —
+  note this differs from the superproject's `master`/`develop` convention.
+- **Literal versions everywhere** (the release-plugin precondition):
+  inventory-parent is `1-SNAPSHOT` (its parent: released
+  `artifex-maven-parent:1`); inventory-api and inventory-impl are
+  `0.1.0-SNAPSHOT`; the parent's `<inventory.version>` is the literal
+  `0.1.0-SNAPSHOT` feeding its dependencyManagement. `${revision}` now
+  exists ONLY in the four app modules (each with its local default
+  `0.0.1-SNAPSHOT`) — the Phase 14 `-Drevision` tag flow now versions the
+  apps alone.
+- **Propagation fixes applied after the move** (the restructuring left the
+  build broken): the aggregator still listed `inventory-impl` as a module
+  (directory deleted → reactor could not build); inventory-web-api and
+  inventory-exporter still pinned parent `0.0.1-SNAPSHOT` (would have
+  silently resolved the STALE pre-move parent from `~/.m2`); stale unused
+  `<revision>` properties removed from all three extracted poms;
+  `<relativePath/>` added to impl's parent block.
+- **Justfile build chain reworked**: `just libs` installs
+  parent → api → impl in order (with tests); `_sync-libs` is the fast
+  no-test variant (dev/fastjars/native prerequisite); `just verify` = libs
+  then app reactor; `clean` stays workspace-only and `clean-libs` cleans the
+  three lib repos (`../artifex-parent` is never touched).
+
 ## Blockers this created
 
-1. **CI is not yet satisfiable.** ci.yml checks out inventory-root plus its
-   submodules; inventory-parent is no longer among them and
-   artifex-maven-parent never was. Until both are published (GitHub Packages
-   is the natural first home) or vendored into the checkout, a clean-clone
-   build cannot resolve its parents. Local builds work only because both are
-   installed in `~/.m2`.
-2. **artifex-maven-parent is `1-SNAPSHOT` and unpublished.** Inventory can
-   develop against a SNAPSHOT parent, but the moment inventory-parent itself
-   is released, it must point at a **released** artifex version — a released
-   artifact cannot have a SNAPSHOT parent. Since artifex releases
-   independently, this is a scheduling dependency, not a shared ceremony:
-   *artifex releases on its own clock; inventory pins whatever version is
-   current when it releases.*
+1. **CI is not yet satisfiable — and the gap widened 2026-08-19.** ci.yml
+   checks out inventory-root plus its submodules; inventory-parent, and now
+   inventory-api and inventory-impl, are no longer among them, and
+   artifex-maven-parent never was. Until all FOUR are published somewhere CI
+   can reach (GitHub Packages is the natural first home) or vendored into
+   the checkout, a clean-clone build cannot resolve them. Local builds work
+   only because everything is installed in `~/.m2` (`just libs`). ci.yml
+   also still lists api/impl paths and needs to shrink to the four apps.
+2. **artifex-maven-parent pin: RESOLVED 2026-08-19** — artifex released as
+   `1` and inventory-parent now pins that released version. The remaining
+   half is publishing: CI can't fetch `artifex-maven-parent:1` until it
+   lives in a reachable repository. (Standing rule unchanged: artifex
+   releases on its own clock; inventory pins whatever version is current
+   when it releases.)
 3. **If Central is chosen** at the release-destination gate, `io.artifexlabs`
    needs namespace verification (artifexlabs.io DNS TXT). Since the
    2026-08-18 rename this is now the ONLY namespace in the chain — parent and
@@ -151,8 +196,11 @@ SUPERPROJECT REACTOR (unchanged release model: v-tag -> GHCR images)
   `${revision}`: only BOM-pinned combinations (which CI verified together)
   ever deploy. Without it, `server` could resolve impl 1.3 + api 1.2 — a
   pair no build ever tested.
-- Submodules stay in the workspace for ergonomics (one checkout, Justfile,
-  IDE); only the aggregator/reactor shrinks to the four apps.
+- ~~Submodules stay in the workspace for ergonomics (one checkout, Justfile,
+  IDE); only the aggregator/reactor shrinks to the four apps.~~ *(Superseded
+  2026-08-19: the owner moved api/impl fully out — peer repos beside the
+  workspace, stitched together by VS Code multi-root folders and the
+  Justfile `libs` chain instead.)*
 
 ## Mechanics
 
@@ -204,17 +252,19 @@ SUPERPROJECT REACTOR (unchanged release model: v-tag -> GHCR images)
    Packages (and add the `settings.xml` server entry to ci.yml and the
    devcontainer), or CI stays broken while local builds pass. This is now
    the true first step — it was implied by step 2 but is no longer optional.
-1. **Impl goes multi-module INSIDE the current reactor.** No release
-   semantics yet: `inventory-impl-parent` + core + `-pg`, consumers'
-   dependencies rewired, full reactor + CI green. Lowest-risk step,
-   immediately useful (native web-app dependency hygiene, changelog-in-jar
-   becomes buildable).
-2. **Release wiring.** *(inventory-parent's half is DONE 2026-08-18: it is
-   out of the reactor with literal parent versions in the six modules.)*
-   Remaining: api/impl move to literal versions;
-   distributionManagement + release-plugin config; first SNAPSHOT deploys
-   to GH Packages; superproject aggregator, Justfile, ci.yml shrink to the
-   apps consuming coordinates instead of reactor paths.
+1. **Impl goes multi-module.** *(Re-scoped 2026-08-19: this now happens
+   INSIDE the ../inventory-impl repo — it left the reactor before the
+   split.)* No release semantics yet: `inventory-impl-parent` + core +
+   `-pg`, consumers' dependencies rewired, impl repo + app reactor green.
+   Still immediately useful (native web-app dependency hygiene,
+   changelog-in-jar becomes buildable).
+2. **Release wiring.** *(MOSTLY DONE — parent 2026-08-18; api/impl
+   2026-08-19: all three are out of the reactor in their own artifexlabs
+   repos with literal versions, and the aggregator + Justfile now treat
+   them as prebuilt libs.)* Remaining: artifact distributionManagement
+   (today all three carry only a site entry) + release-plugin config; first
+   SNAPSHOT deploys to GH Packages; ci.yml shrinks to the apps consuming
+   coordinates instead of reactor paths.
 3. **First releases + inventory-bom.** `release:prepare` dry-run, then real
    releases of parent → api → impl; BOM cut; apps pinned to it.
 4. **Deploy-side payoff.** Migrate consumption switches to the versioned
