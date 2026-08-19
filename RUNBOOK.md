@@ -125,7 +125,7 @@ docker compose --project-directory . -f deploy/docker-compose.yml up -d
 ## Migrations (day-2)
 
 Forward: add a changeset (with rollback) under
-`inventory-impl-root/inventory-impl-pg/src/main/resources/db/changeset/`, include it in
+`inventory-impl-root/inventory-impl-changeset/src/main/resources/db/changeset/`, include it in
 `db/changelog-master.yaml`, then `docker compose --project-directory . -f deploy/docker-compose.yml run --rm migrate` (or just
 `up -d` — migrate always runs before the server).
 

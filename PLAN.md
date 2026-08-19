@@ -441,6 +441,21 @@ rather than an emergency patch.
   mount). Snapshots → GitHub Packages; release destination (Central-public
   vs GH-Packages-private) is a staged gate; groupId stays
   `io.artifexlabs.inventory` (renamed from org.lawfulevil 2026-08-18; artifexlabs.io controlled).
+  *(EXECUTED 2026-08-19 as the `inventory-impl-root` aggregator repo.)*
+- **Step 1b (accepted 2026-08-19): `inventory-impl-changeset`.** The
+  Liquibase `db/**` changesets leave `inventory-impl-pg` for a third,
+  RESOURCES-ONLY module in the same `inventory-impl-root` release train
+  (no code, no dependencies — the schema as a versioned artifact); `-pg`
+  depends on it, so the changelog stays on every existing classpath
+  transitively, and the parent's dependencyManagement exposes it for
+  future consumers. Deliberately no code moves: every `Pg*` class is
+  pg-client-coupled, and no vendor-neutral code exists today (a
+  `Changelog` path-locator constant may be added later if a second
+  consumer wants it). Payoff: the step-4 migrate image / changelog-from-jar
+  work consumes a dependency-free jar instead of dragging pg-client and
+  core into a Liquibase-CLI image; deploy mounts point at
+  `inventory-impl-root/inventory-impl-changeset/src/main/resources` until
+  step 4 retires path-mounting entirely.
 
 ## First milestone (Phase 1, implementable detail)
 

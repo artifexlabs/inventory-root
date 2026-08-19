@@ -48,8 +48,8 @@ services:
       retries: 15
 
   # Controlled schema migration (the day-2 path): Liquibase CLI over the
-  # changelogs in the inventory-impl-pg module (changelog-in-jar is the
-  # staged replacement for this mount — MAVEN_RELEASES.md). Runs to
+  # changelogs in the inventory-impl-changeset module (changelog-in-jar is
+  # the staged replacement for this mount — MAVEN_RELEASES.md). Runs to
   # completion, then exits.
   migrate:
     image: liquibase/liquibase:4.29
@@ -57,7 +57,7 @@ services:
       postgres:
         condition: service_healthy
     volumes:
-      - ./inventory-impl-root/inventory-impl-pg/src/main/resources:/liquibase/changelog:ro
+      - ./inventory-impl-root/inventory-impl-changeset/src/main/resources:/liquibase/changelog:ro
     command: >
       --url=jdbc:postgresql://postgres:5432/inventory
       --username=inventory --password=${POSTGRES_PASSWORD:-inventory}

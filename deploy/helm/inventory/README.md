@@ -33,8 +33,8 @@ helm install inventory deploy/helm/inventory \
 ## Changelog copies (maintenance rule)
 
 `files/changelog/` holds COPIES of
-`inventory-impl-root/inventory-impl-pg/src/main/resources/db/**` — compose bind-mounts the
+`inventory-impl-root/inventory-impl-changeset/src/main/resources/db/**` — compose bind-mounts the
 originals, but a cluster has no repo checkout. **When a changeset is added
-under inventory-impl-pg: re-copy it here AND add its volume item in
+under inventory-impl-changeset: re-copy it here AND add its volume item in
 `templates/migrate-job.yaml`.** The migrate Job then applies it on the next
 `helm upgrade`, before the apps restart.

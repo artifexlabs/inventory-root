@@ -156,6 +156,15 @@ Maven artifacts via maven-release-plugin, with the apps consuming them.*
     resources (changelog-in-jar is now REAL), `PgInventorySystemTest`
     (Testcontainers + Liquibase — already classpath-based, so it worked
     unchanged). Depends on core at `${project.version}`.
+  - *(Step 1b, accepted + executed later 2026-08-19)*: the `db/**`
+    changelogs moved again, into **`inventory-impl-changeset`** — a
+    resources-only third module with no code and no dependencies; `-pg`
+    depends on it, so every existing classpath still sees
+    `db/changelog-master.yaml` transitively, and step 4's migrate image
+    can consume the schema WITHOUT pg-client/core. Deploy mounts point at
+    `inventory-impl-root/inventory-impl-changeset/src/main/resources`.
+    Deliberately no code moved: every Pg* class is pg-client-coupled and
+    no vendor-neutral code existed.
   - Parity note: the memory twin's test stays in core, the Pg twin's in
     `-pg` — one aggregator reactor run still executes both, which is what
     the one-version decision was protecting.
@@ -230,11 +239,13 @@ RELEASED ARTIFACTS (maven-release-plugin, literal versions)
                             dependencyManagement, flatten EXECUTIONS;
                             gains distributionManagement
   inventory-api             domain contracts
-  inventory-impl-root       aggregator releasing BOTH modules as one version
-                            (BUILT 2026-08-19):
+  inventory-impl-root       aggregator releasing its modules as one version
+                            (BUILT 2026-08-19; changeset split same day):
     inventory-impl            core: domain impls, InMemory twins, bus
                               verticles, label/QR/catalog machinery, Gtin/Ulid
-    inventory-impl-pg         Pg* classes + db/ changelogs in resources
+    inventory-impl-changeset  db/** Liquibase changelogs ONLY — no code, no
+                              deps; the schema as a versioned artifact
+    inventory-impl-pg         Pg* classes; depends on core + changeset
   inventory-bom             pins one coherent api+impl version set
 
 SUPERPROJECT REACTOR (unchanged release model: v-tag -> GHCR images)
