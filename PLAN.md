@@ -1635,7 +1635,17 @@ free. Item 4 is standalone.
       covers `0-9 A-Z $%*+-./:` — so an all-uppercase short URL like
       `HTTP://SHORT.HOST/I/<26-char ULID>` (~43 chars) DOES fit 9 mm and
       would restore generic-camera scanning. Needs a short host name and a
-      case-insensitive (or uppercase-aliased) `/i/` route. Print discipline
+      case-insensitive (or uppercase-aliased) `/i/` route. **NAMED FORMAT
+      ADDED 2026-08-18**: `qr-only` — the Brother's first named format,
+      riding the same `?format=` plumbing as the Zebra names — forces the
+      QR-only layout on ANY tape (24 mm gives a 116-dot ≈16 mm URL code, no
+      text); null keeps the automatic behavior, unknown names refuse without
+      touching the printer. Works per-request in batches too. **12 mm stock
+      ORDERED, arriving Thursday 2026-08-20**: 12 mm auto-prints the FULL
+      URL payload (v3/29 modules at 2 dots/module = 58 of its 70 dots —
+      unit-pinned at 62 raster lines), so those labels scan in any generic
+      camera app; the hardware check is one print + phone scan, and the
+      module density is already proven by the 9 mm gate. Print discipline
       applies.)* - Make the smallest possible QR code for an object
       so that we could just attach the QR code to something very small.  The QR code should reference
       just like the original one, but it's possible that we could make one slightly smaller that
