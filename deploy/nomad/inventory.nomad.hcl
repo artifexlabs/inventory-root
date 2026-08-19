@@ -125,7 +125,7 @@ job "inventory" {
     # NOT sidecar). It races postgres's first boot, so failures retry until
     # the database answers — the compose depends_on translated to a restart
     # policy. Changelogs ship inside... nowhere on a Nomad client: mount the
-    # inventory-impl resources from a checkout on the node, exactly like the
+    # inventory-impl-pg resources from a checkout on the node, exactly like the
     # compose bind mount (set the path for your node below).
     task "migrate" {
       driver = "docker"
@@ -152,12 +152,12 @@ job "inventory" {
           "--changelog-file=db/changelog-master.yaml",
           "update",
         ]
-        # a checkout of inventory-impl on the client node (repo at the tag
-        # being deployed — the same rule as the compose release deploy).
+        # a checkout of inventory-impl-root on the client node (repo at the
+        # tag being deployed — the same rule as the compose release deploy).
         # Docker-driver bind mounts require the client's plugin config:
         #   plugin "docker" { config { volumes { enabled = true } } }
         volumes = [
-          "/opt/inventory/checkout/inventory-impl/src/main/resources:/liquibase/changelog:ro",
+          "/opt/inventory/checkout/inventory-impl-root/inventory-impl-pg/src/main/resources:/liquibase/changelog:ro",
         ]
       }
 

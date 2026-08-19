@@ -28,6 +28,15 @@ into [PLAN.md](PLAN.md) as a milestone (or several) and this file retires.*
 > lasting shape is: submodules for ergonomics, prebuilt libs for the build
 > (`just libs` → reactor). Also: **artifex-maven-parent 2 released to Maven
 > Central** (`io.artifexlabs.parents`); inventory-parent now pins 2.
+>
+> **STEP 1 EXECUTED 2026-08-19.** The owner created the
+> **`inventory-impl-root`** aggregator repo (artifexlabs org, main+develop,
+> git-flow'd), moved `inventory-impl` inside it, and detached impl's own
+> git history (`.git` → `.git.old`, kept locally). The core/`-pg` split was
+> then executed inside it: `inventory-impl-root` (pom aggregator) →
+> `inventory-impl` (core) + `inventory-impl-pg` (Pg backends + changelogs).
+> The standalone `artifexlabs/inventory-impl` GitHub repo is DEFUNCT —
+> archive it, don't delete it.
 
 *This activates the "revisit" clause of the Phase 14 decision ("no Maven
 artifact repository is needed — revisit only if an external build ever
@@ -125,6 +134,40 @@ Maven artifacts via maven-release-plugin, with the apps consuming them.*
   then app reactor; `clean` stays workspace-only and `clean-libs` cleans the
   three lib repos (`../artifex-parent` is never touched).
 
+## What already happened (2026-08-19, later — step 1)
+
+- **inventory-impl-root created by the owner** and wired as the impl repo of
+  record: `git@github.com:artifexlabs/inventory-impl-root.git`, `main` +
+  `develop`, git-flow initialized; `.gitmodules` swapped `inventory-impl` →
+  `inventory-impl-root`. impl's previous standalone history is preserved
+  locally in `inventory-impl/.git.old` and in the now-DEFUNCT
+  `artifexlabs/inventory-impl` repo (archive it).
+- **The split** (this document's step 1, executed in the new layout):
+  - `inventory-impl-root` — pom aggregator, parent `inventory-parent`,
+    literal `0.1.0-SNAPSHOT`; the future release-plugin
+    `autoVersionSubmodules=true` root.
+  - `inventory-impl` (core) — re-parented onto the aggregator, version
+    inherited; keeps domain impls, InMemory twins, bus verticles,
+    label/QR/catalog machinery, Gtin/Ulid, and the Ulid native-image
+    config. **Sheds** `smallrye-mutiny-vertx-pg-client` and the whole
+    Testcontainers/Liquibase/JDBC test surface.
+  - `inventory-impl-pg` — the six `Pg*` classes (same
+    `io.artifexlabs.inventory.impl` package), `db/**` changelogs in
+    resources (changelog-in-jar is now REAL), `PgInventorySystemTest`
+    (Testcontainers + Liquibase — already classpath-based, so it worked
+    unchanged). Depends on core at `${project.version}`.
+  - Parity note: the memory twin's test stays in core, the Pg twin's in
+    `-pg` — one aggregator reactor run still executes both, which is what
+    the one-version decision was protecting.
+- **Consumers rewired**: inventory-parent's dependencyManagement gains
+  `inventory-impl-pg` at `${inventory.version}`; server, web-api, and
+  exporter (all construct `Pg*` backends) now depend on `-pg`; web-app
+  depends only on `inventory-api` and needed nothing.
+- **Path updates**: Justfile `lib_dirs` and ci.yml build
+  `inventory-impl-root`; the compose migrate mount, Nomad checkout mount,
+  and Helm copy-rule comments follow the changelogs to
+  `inventory-impl-root/inventory-impl-pg/src/main/resources`.
+
 ## Blockers this created
 
 1. **CI: FULLY RESOLVED 2026-08-19** (run 32252083378 green end to end:
@@ -145,18 +188,17 @@ Maven artifacts via maven-release-plugin, with the apps consuming them.*
    when it releases.) Bonus: its presence on Central means the
    `io.artifexlabs` namespace verification already exists — one blocker
    under the release-destination gate is pre-cleared.
-3. **If Central is chosen** at the release-destination gate, `io.artifexlabs`
-   needs namespace verification (artifexlabs.io DNS TXT). Since the
-   2026-08-18 rename this is now the ONLY namespace in the chain — parent and
-   inventory alike — so one verification covers everything, rather than
-   artifexlabs.io plus a separate lawfulevil.org.
-4. **flatten-maven-plugin has no declared version anywhere in the chain**
-   (ibparent manages none; artifex dropped it; inventory-parent only binds
-   executions). Maven currently resolves it from metadata — it silently
-   picked 1.8.0 on 2026-08-18 — so builds work but are not reproducible: a
-   future release would change the build with no commit. Left alone per
-   owner instruction ("unless it actually breaks something"); pinning it in
-   artifex's `<pluginManagement>` is the fix when it matters.
+3. **Central namespace verification: CLEARED 2026-08-19** — the owner has
+   verified `io.artifexlabs` on Central and already deployed to it. Since
+   the 2026-08-18 rename it is the ONLY namespace in the chain, so this one
+   verification covers parent and inventory alike. The release-destination
+   gate (step 5) is now purely a publicness choice, with no verification
+   work behind it.
+4. **flatten-maven-plugin version: CLEARED 2026-08-19** — the pin is now
+   inherited from ibparent-minimal at the top of the parent tree (owner
+   confirmed; verified in the effective pom: pluginManagement carries
+   `1.8.0` through artifex-maven-parent 2). Builds are reproducible on this
+   axis again — no local action needed.
 
 ## Grounding facts (verified 2026-08-17)
 
@@ -188,7 +230,8 @@ RELEASED ARTIFACTS (maven-release-plugin, literal versions)
                             dependencyManagement, flatten EXECUTIONS;
                             gains distributionManagement
   inventory-api             domain contracts
-  inventory-impl-parent     aggregator releasing BOTH modules as one version:
+  inventory-impl-root       aggregator releasing BOTH modules as one version
+                            (BUILT 2026-08-19):
     inventory-impl            core: domain impls, InMemory twins, bus
                               verticles, label/QR/catalog machinery, Gtin/Ulid
     inventory-impl-pg         Pg* classes + db/ changelogs in resources
@@ -222,7 +265,7 @@ SUPERPROJECT REACTOR (unchanged release model: v-tag -> GHCR images)
   namespace verification for io.artifexlabs.
 - **maven-release-plugin** per repo: `releaseProfiles=release` (rides
   ibparent's sources/javadoc profile), `tagNameFormat=v@{project.version}`,
-  `autoVersionSubmodules=true` in inventory-impl-parent so both modules
+  `autoVersionSubmodules=true` in inventory-impl-root so both modules
   version as one. `${revision}` + flatten-maven-plugin come OUT of the
   extracted poms (release-plugin rewrites literal versions; the apps' reactor
   keeps `${revision}` for the platform tag).
@@ -239,6 +282,26 @@ SUPERPROJECT REACTOR (unchanged release model: v-tag -> GHCR images)
   cross-repo dev = local `mvn install` of SNAPSHOTs exactly as today, with
   GH Packages as the shared SNAPSHOT channel when a change must be visible
   to CI or another machine before release.
+- **Build recipes must ALWAYS clean, because the IDE poisons target/**
+  (added 2026-08-19 after a long false trail — this was the real "verify
+  flake"): VS Code's Eclipse-JDT compiler writes `.class` files into
+  `target/classes` even when sources DON'T resolve (during repo moves /
+  submodule shuffles its workspace model breaks), baking in "Unresolved
+  compilation problems" stubs whose unresolvable types are erased to bare
+  simple names. Maven's incremental compile then trusts those newer
+  `.class` files, and the stubs surface as phantom test-bootstrap errors
+  (ArC "Producer method return type not found in index: UserStore", JUnit
+  ClassSelector "Could not load class", Qute missing templates) in
+  whichever module the IDE last rewrote — passing in isolation because
+  isolation runs used `clean`. The Justfile's `verify`/`libs`/`_sync-libs`/
+  `fastjars`/`native` now all run `clean` first; diagnostic: `javap -v`
+  shows the "Unresolved compilation problems" string in the constant pool,
+  or `grep -rl 'Unresolved compilation problem'` over target/classes.
+- **Library jars ship a Jandex index** (also 2026-08-19): inventory-parent
+  binds `io.smallrye:jandex-maven-plugin` (pinned 3.6.0) so every lib jar
+  carries `META-INF/jandex.idx` and is a deterministic Quarkus application
+  archive rather than relying on ArC's fallback indexing of external jars.
+  Any future extracted library consumed by a Quarkus app inherits this.
 
 ## Costs accepted (recorded so nobody is surprised later)
 
@@ -262,12 +325,10 @@ SUPERPROJECT REACTOR (unchanged release model: v-tag -> GHCR images)
    made CI buildable from source again (see Blockers #1). Only the
    `SUBMODULE_TOKEN` artifexlabs-org scope check survives from this step;
    GH-Packages SNAPSHOT publishing folds back into step 2 where it started.
-1. **Impl goes multi-module.** *(Re-scoped 2026-08-19: this now happens
-   INSIDE the ../inventory-impl repo — it left the reactor before the
-   split.)* No release semantics yet: `inventory-impl-parent` + core +
-   `-pg`, consumers' dependencies rewired, impl repo + app reactor green.
-   Still immediately useful (native web-app dependency hygiene,
-   changelog-in-jar becomes buildable).
+1. **Impl goes multi-module.** ***EXECUTED 2026-08-19*** in the
+   owner-created `inventory-impl-root` repo: aggregator + core + `-pg`,
+   consumers rewired, changelog-in-jar real, impl reactor + app reactor
+   green (see "What already happened (2026-08-19, later — step 1)").
 2. **Release wiring.** *(MOSTLY DONE — parent 2026-08-18; api/impl
    2026-08-19: all three are out of the reactor in their own artifexlabs
    repos with literal versions, and the aggregator + Justfile now treat

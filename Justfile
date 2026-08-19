@@ -42,7 +42,7 @@ compose := "docker compose --project-directory . -f deploy/docker-compose.yml"
 # (artifexlabs-org repos) but deliberately NOT reactor modules — they install
 # to ~/.m2 and the apps consume them as jars. artifex-maven-parent is NOT
 # here on purpose — it releases on its own clock and resolves from Central.
-lib_dirs := "inventory-parent inventory-api inventory-impl"
+lib_dirs := "inventory-parent inventory-api inventory-impl-root"
 
 # EVERY recipe that runs Maven tests must go through this.
 #
@@ -101,21 +101,39 @@ libs:
     #!/usr/bin/env bash
     set -euo pipefail
     for d in {{ lib_dirs }}; do
-      echo "-> delegating to Maven: mvn -B install in $d (with tests)"
-      {{ test_env }} mvn -B -ntp -f "$d/pom.xml" install
+      echo "-> delegating to Maven: mvn -B clean install in $d (with tests)"
+      {{ test_env }} mvn -B -ntp -f "$d/pom.xml" clean install
     done
+    just _invalidate-quarkus-model-cache
+
+# Quarkus serializes each app's test ApplicationModel to
+# target/quarkus/bootstrap/*.dat and trusts it on the next run. Reinstalling
+# the lib jars invalidates what those models recorded (dependency flags like
+# is-this-jar-an-indexed-archive), and stale models then fail test bootstrap
+# with misleading errors (ArC "not found in index", JUnit ClassSelector
+# "Could not load class") in whichever app module cached one. Sweep them
+# whenever the libs are rebuilt.
+_invalidate-quarkus-model-cache:
+    @find . -type f -path '*/target/quarkus/bootstrap/*.dat' -print -delete || true
 
 # Build + JVM-test everything: the lib repos in order, then the app reactor.
+# ALWAYS clean: VS Code's Eclipse-JDT compiler writes .class files into
+# target/classes even when sources DON'T compile (it bakes "Unresolved
+# compilation problem" stubs in, erasing unresolvable types), and Maven's
+# incremental compile then trusts them — the source of a whole family of
+# phantom test-bootstrap failures (ArC "not found in index", JUnit
+# "Could not load class", Qute missing templates). Clean compiles are the
+# only defense while the workspace is open in an IDE.
 [group('build')]
 verify: libs
-    @echo "-> delegating to Maven: mvn -B verify (the four app modules, JVM tests)"
-    {{ test_env }} mvn -B verify
+    @echo "-> delegating to Maven: mvn -B clean verify (the four app modules, JVM tests)"
+    {{ test_env }} mvn -B clean verify
 
 # Native executable for one module, compiled in the Linux builder container.
 [group('build')]
 native module: _sync-libs
     @echo "-> delegating to Maven: native build of {{ module }} ({{ native_flags }})"
-    mvn -pl {{ module }} -am package {{ native_flags }}
+    mvn -pl {{ module }} -am clean package {{ native_flags }}
 
 # JVM fast-jars for the bus members (gateway, server, exporter): the
 # vertx-infinispan cluster manager is not yet proven under GraalVM native,
@@ -123,7 +141,7 @@ native module: _sync-libs
 [group('build')]
 fastjars: _sync-libs
     @echo "-> delegating to Maven: fast-jars for the bus members"
-    {{ test_env }} mvn -pl inventory-server,inventory-web-api,inventory-exporter -am package -DskipTests
+    {{ test_env }} mvn -pl inventory-server,inventory-web-api,inventory-exporter -am clean package -DskipTests
 
 # Native executables (web-app only in the deployed stack).
 [group('build')]
@@ -148,9 +166,10 @@ _sync-libs:
     #!/usr/bin/env bash
     set -euo pipefail
     for d in {{ lib_dirs }}; do
-      echo "-> delegating to Maven: mvn -B install in $d (tests skipped)"
-      {{ test_env }} mvn -q -B -ntp -f "$d/pom.xml" install -Dmaven.test.skip=true
+      echo "-> delegating to Maven: mvn -B clean install in $d (tests skipped)"
+      {{ test_env }} mvn -q -B -ntp -f "$d/pom.xml" clean install -Dmaven.test.skip=true
     done
+    just _invalidate-quarkus-model-cache
 
 # inventory-web-api in live-coding mode on :8081 (embedded bus workers on the
 # local bus — the full envelope path in one process; memory storage).

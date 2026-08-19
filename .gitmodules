@@ -1,3 +1,6 @@
+[submodule "inventory-impl-root"]
+	path = inventory-impl-root
+	url = git@github.com:artifexlabs/inventory-impl-root.git
 [submodule "inventory-server"]
 	path = inventory-server
 	url = git@github.com:mykelalvis/inventory-server.git
@@ -19,6 +22,3 @@
 [submodule "inventory-api"]
 	path = inventory-api
 	url = git@github.com:artifexlabs/inventory-api.git
-[submodule "inventory-impl"]
-	path = inventory-impl
-	url = git@github.com:artifexlabs/inventory-impl.git

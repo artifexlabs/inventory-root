@@ -50,7 +50,7 @@ jobs:
       # Central (io.artifexlabs.parents:artifex-maven-parent:2).
       - name: Build and install the libs (parent -> api -> impl)
         run: |
-          for d in inventory-parent inventory-api inventory-impl; do
+          for d in inventory-parent inventory-api inventory-impl-root; do
             mvn -B -ntp -f "$d/pom.xml" install
           done
       - name: Build and test the app modules
