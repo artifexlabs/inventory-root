@@ -457,6 +457,75 @@ rather than an emergency patch.
   `inventory-impl-root/inventory-impl-changeset/src/main/resources` until
   step 4 retires path-mounting entirely.
 
+### Phase 20 — Alternate storage backends: MySQL, then possibly SQLite / MongoDB / DynamoDB *(added 2026-08-19; STAGED, not scheduled — each backend is its own opt-in milestone with a go/no-go gate)*
+
+The `inventory-impl-root` split proved the shape: backends are peer modules
+implementing the `inventory-api` interfaces, released on one version, with
+the memory/Pg twins' parity tests as the safety net. This phase generalizes
+that to N backends. **Standing cost, stated up front:** every backend is a
+permanent tax — each new store method needs another implementation, and
+each relational backend another changeset dialect. The api↔impl seam is
+already the hottest in the codebase; nothing below is committed until a
+backend individually earns its keep.
+
+- **Step 0 (prerequisite for ANY second backend): extract the parity TCK.**
+  Today the InMemory and Pg test suites are hand-written twins; a third
+  backend would make it three hand-synced copies. Before MySQL lands,
+  refactor the behavioral assertions (CRUD, containment, tags/identities,
+  refusal precedence, audit ordering, timestamp precision = UTC micros)
+  into an abstract, backend-parameterized test kit — either in core's
+  attached tests-jar (the `GpsJpeg` pattern) or a small
+  `inventory-impl-tck` module. Each backend module then ships a thin
+  harness class; a new behavior is written ONCE and every backend proves it
+  in the same impl-root reactor pass. This step pays for itself even if no
+  second backend ever ships.
+- **Backend taxonomy — two families with different obligations:**
+  - *Relational + Liquibase* (MySQL, SQLite): share
+    `inventory-impl-changeset`, using Liquibase `dbms`-qualified changesets
+    where portable types don't reach. A portability audit of the current
+    changesets comes first: `text`/`varchar`/`boolean`/`bigint`/`double
+    precision` map cleanly; `timestamptz` (×10), `bytea` (×2), `jsonb` (×1)
+    are Postgres spellings needing portable replacements or `dbms` forks.
+  - *Non-relational* (MongoDB, DynamoDB): Liquibase and the changeset
+    artifact DO NOT apply. Each owns its schema bootstrap (Mongo: index
+    creation at startup or liquibase-mongodb; Dynamo: CreateTable bootstrap
+    vs IaC — decided at that backend's gate). The API's transactional
+    assumptions (multi-row writes under one transaction in Pg) must be
+    restated per backend as contracts the TCK can assert — Mongo txns need
+    replica sets; Dynamo's TransactWriteItems caps at 100 items.
+- **Milestone 20a — `inventory-impl-mysql`** (closest port, do first):
+  `smallrye-mutiny-vertx-mysql-client` shares the vertx-sql-client core
+  with the Pg client, so class skeletons port mechanically. Known dialect
+  work: `$n` placeholders → `?` everywhere (24 in PgInventorySystem
+  alone); `ON CONFLICT DO UPDATE/DO NOTHING` (3 sites) → `ON DUPLICATE KEY
+  UPDATE`/`INSERT IGNORE`; `DELETE … RETURNING` (PgAssetStore) →
+  select-then-delete in one transaction; `timestamptz` semantics →
+  `DATETIME(6)` + store-UTC convention (the `truncatedTo(MICROS)` lesson
+  applies doubly). Wiring: `INVENTORY_STORAGE=mysql` branch in the three
+  producers, `quarkus-reactive-mysql-client` in consuming apps,
+  Testcontainers `mysql` + Dev Services for the TCK harness. Rough size:
+  six classes + TCK harness + changeset portability pass + wiring.
+- **Milestone 20b — `inventory-impl-sqlite`** (if wanted): no reactive
+  Vert.x client exists — this backend introduces the blocking-adapter
+  pattern (JDBC on worker threads behind the same CompletionStage API),
+  which is its real cost and its real value (the pattern generalizes).
+  Single-writer semantics; Liquibase supports SQLite with limitations that
+  our mostly-CREATE changesets fit. Embedded/file DB would give the stack
+  a zero-container deployment mode.
+- **Milestone 20c/20d — MongoDB / DynamoDB spikes** (if wanted): document
+  and key-value remappings of the containment model respectively — these
+  are *modeling* exercises first, ports second (single-table design for
+  Dynamo; embedded-vs-referenced containment for Mongo). Reactive clients
+  exist for both (quarkus-mongodb-client; AWS SDK v2 async +
+  LocalStack/dynamodb-local for tests). Each starts as a
+  one-interface spike (InventorySystem only) behind the TCK before
+  committing to the full six-role port.
+- **Deployment note:** the compose `migrate` service is Liquibase-shaped;
+  relational backends slot in (different image/driver), non-relational
+  backends replace it with their bootstrap. The step-4 (Phase 19)
+  changelog-in-jar work stays single-sourced: one changeset artifact, all
+  relational dialects inside.
+
 ## First milestone (Phase 1, implementable detail)
 
 1. **`inventory-api`** — de-codegen and extend:
