@@ -38,10 +38,11 @@ ios_simulator := env('INVENTORY_IOS_SIMULATOR', 'iPhone 17')
 compose := "docker compose --project-directory . -f deploy/docker-compose.yml"
 
 # The extracted library repos (MAVEN_RELEASES.md), built IN THIS ORDER before
-# the reactor: parent -> api -> impl. They live beside the workspace as their
-# own repos (artifexlabs org). artifex-maven-parent is NOT here on purpose —
-# it releases on its own clock and is consumed from ~/.m2 / a repository.
-lib_dirs := "../inventory-parent ../inventory-api ../inventory-impl"
+# the reactor: parent -> api -> impl. They are workspace submodules again
+# (artifexlabs-org repos) but deliberately NOT reactor modules — they install
+# to ~/.m2 and the apps consume them as jars. artifex-maven-parent is NOT
+# here on purpose — it releases on its own clock and resolves from Central.
+lib_dirs := "inventory-parent inventory-api inventory-impl"
 
 # EVERY recipe that runs Maven tests must go through this.
 #
@@ -64,9 +65,10 @@ default:
 # --- build -------------------------------------------------------------------
 
 # Scope is deliberately the aggregator's four app modules. `mvn clean` only
-# visits reactor modules, so the peer repos are out of reach by construction —
-# the explicit sweep below is likewise confined to this tree; use `clean-libs`
-# for the extracted library repos. artifex-parent is NEVER touched here.
+# visits reactor modules, so the lib submodules stay untouched (use
+# `clean-libs` for those; the flattened-pom sweep below does cover them,
+# which is safe — stale flattened poms must never survive anywhere).
+# artifex-parent is NEVER touched here.
 # Deliberately NOT removed: src/main/web/node_modules (a dependency cache the
 # island build reuses) and Xcode DerivedData (outside the repo).
 #
@@ -80,7 +82,7 @@ clean:
     @find . -mindepth 2 -maxdepth 2 -name '.flattened-pom.xml' -print -delete || true
     @echo "clean: workspace modules only — peer lib repos untouched (use clean-libs)"
 
-# Remove build output from the three extracted lib repos (NOT artifex-parent).
+# Remove build output from the three lib submodules (NOT artifex-parent).
 [group('build')]
 clean-libs:
     #!/usr/bin/env bash

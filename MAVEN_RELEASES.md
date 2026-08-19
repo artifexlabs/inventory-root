@@ -19,8 +19,15 @@ into [PLAN.md](PLAN.md) as a milestone (or several) and this file retires.*
 > reactor and `.gitmodules`, re-homed as fresh repos in the **artifexlabs**
 > GitHub org, literal versions everywhere. Step 2 is now essentially done
 > except publishing wiring; steps 1, 3, and 4 remain unstarted, and step 1
-> (the impl core/-pg split) now happens inside the impl repo rather than
-> inside this reactor.
+> (the impl core/-pg split) happens inside the impl repo.
+>
+> **PARTIALLY REVERSED later 2026-08-19** (owner: the out-of-workspace move
+> "gains me nothing"): all three came back INTO the workspace as
+> `.gitmodules` submodules — but stay OUT of the reactor, keep their
+> artifexlabs-org repos, fresh histories, and literal versions. So the
+> lasting shape is: submodules for ergonomics, prebuilt libs for the build
+> (`just libs` → reactor). Also: **artifex-maven-parent 2 released to Maven
+> Central** (`io.artifexlabs.parents`); inventory-parent now pins 2.
 
 *This activates the "revisit" clause of the Phase 14 decision ("no Maven
 artifact repository is needed — revisit only if an external build ever
@@ -85,12 +92,11 @@ Maven artifacts via maven-release-plugin, with the apps consuming them.*
 ## What already happened (2026-08-19)
 
 - **inventory-api and inventory-impl extracted**: removed from the
-  aggregator's `<modules>`, from `.gitmodules`, and from the workspace tree;
-  they now live at `../inventory-api` and `../inventory-impl` beside
-  `../inventory-parent` (VS Code multi-root folders in
-  `inventory.code-workspace` replace the old submodule ergonomics — this
-  supersedes the "submodules stay in the workspace" line under Target
-  architecture).
+  aggregator's `<modules>` and from the reactor build. *(They briefly left
+  the workspace tree entirely; reversed the same day — all three are
+  `.gitmodules` submodules again, exactly the "submodules stay in the
+  workspace" line under Target architecture. Only the REACTOR exclusion
+  stands.)*
 - **All three repos re-homed to the artifexlabs GitHub org as FRESH repos**:
   the owner deleted each `.git` and re-established the current revision as a
   new first commit (`git@github.com:artifexlabs/inventory-{parent,api,impl}.git`).
@@ -121,20 +127,23 @@ Maven artifacts via maven-release-plugin, with the apps consuming them.*
 
 ## Blockers this created
 
-1. **CI is not yet satisfiable — and the gap widened 2026-08-19.** ci.yml
-   checks out inventory-root plus its submodules; inventory-parent, and now
-   inventory-api and inventory-impl, are no longer among them, and
-   artifex-maven-parent never was. Until all FOUR are published somewhere CI
-   can reach (GitHub Packages is the natural first home) or vendored into
-   the checkout, a clean-clone build cannot resolve them. Local builds work
-   only because everything is installed in `~/.m2` (`just libs`). ci.yml
-   also still lists api/impl paths and needs to shrink to the four apps.
-2. **artifex-maven-parent pin: RESOLVED 2026-08-19** — artifex released as
-   `1` and inventory-parent now pins that released version. The remaining
-   half is publishing: CI can't fetch `artifex-maven-parent:1` until it
-   lives in a reachable repository. (Standing rule unchanged: artifex
+1. **CI: RESOLVED in design 2026-08-19 (needs one secrets check).** The
+   reversal restored parent/api/impl as submodules, so CI checks them out
+   again and builds them from source (ci.yml now runs the same
+   parent → api → impl install chain as `just libs` before the reactor);
+   artifex-maven-parent resolves from Central. Remaining risk: the
+   fine-grained `SUBMODULE_TOKEN` PAT was scoped to the mykelalvis
+   `inventory-*` repos — it must also grant `contents:read` on the three
+   **artifexlabs** repos or their checkout fails. Publishing to GitHub
+   Packages is no longer a CI prerequisite; it returns to being step 2's
+   SNAPSHOT-channel work.
+2. **artifex-maven-parent pin: FULLY RESOLVED 2026-08-19** —
+   `io.artifexlabs.parents:artifex-maven-parent:2` is released ON MAVEN
+   CENTRAL and inventory-parent pins it. (Standing rule unchanged: artifex
    releases on its own clock; inventory pins whatever version is current
-   when it releases.)
+   when it releases.) Bonus: its presence on Central means the
+   `io.artifexlabs` namespace verification already exists — one blocker
+   under the release-destination gate is pre-cleared.
 3. **If Central is chosen** at the release-destination gate, `io.artifexlabs`
    needs namespace verification (artifexlabs.io DNS TXT). Since the
    2026-08-18 rename this is now the ONLY namespace in the chain — parent and
@@ -196,11 +205,11 @@ SUPERPROJECT REACTOR (unchanged release model: v-tag -> GHCR images)
   `${revision}`: only BOM-pinned combinations (which CI verified together)
   ever deploy. Without it, `server` could resolve impl 1.3 + api 1.2 — a
   pair no build ever tested.
-- ~~Submodules stay in the workspace for ergonomics (one checkout, Justfile,
-  IDE); only the aggregator/reactor shrinks to the four apps.~~ *(Superseded
-  2026-08-19: the owner moved api/impl fully out — peer repos beside the
-  workspace, stitched together by VS Code multi-root folders and the
-  Justfile `libs` chain instead.)*
+- Submodules stay in the workspace for ergonomics (one checkout, Justfile,
+  IDE); only the aggregator/reactor shrinks to the four apps. *(Briefly
+  reversed then restored 2026-08-19 — this is the standing shape: submodule
+  checkouts, artifexlabs-org remotes, built by `just libs`, consumed as
+  jars.)*
 
 ## Mechanics
 
@@ -247,11 +256,11 @@ SUPERPROJECT REACTOR (unchanged release model: v-tag -> GHCR images)
 
 ## Staged execution steps (each a milestone-sized chunk when scheduled)
 
-0. **URGENT, created by the 2026-08-18 move: make CI satisfiable again.**
-   Publish artifex-maven-parent and inventory-parent as SNAPSHOTs to GitHub
-   Packages (and add the `settings.xml` server entry to ci.yml and the
-   devcontainer), or CI stays broken while local builds pass. This is now
-   the true first step — it was implied by step 2 but is no longer optional.
+0. ~~URGENT: make CI satisfiable again (publish the parents).~~ **RETIRED
+   2026-08-19**: the submodule reversal + artifex-maven-parent 2 on Central
+   made CI buildable from source again (see Blockers #1). Only the
+   `SUBMODULE_TOKEN` artifexlabs-org scope check survives from this step;
+   GH-Packages SNAPSHOT publishing folds back into step 2 where it started.
 1. **Impl goes multi-module.** *(Re-scoped 2026-08-19: this now happens
    INSIDE the ../inventory-impl repo — it left the reactor before the
    split.)* No release semantics yet: `inventory-impl-parent` + core +

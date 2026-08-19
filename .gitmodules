@@ -13,3 +13,12 @@
 [submodule "inventory-exporter"]
 	path = inventory-exporter
 	url = git@github.com:mykelalvis/inventory-exporter.git
+[submodule "inventory-parent"]
+	path = inventory-parent
+	url = git@github.com:artifexlabs/inventory-parent.git
+[submodule "inventory-api"]
+	path = inventory-api
+	url = git@github.com:artifexlabs/inventory-api.git
+[submodule "inventory-impl"]
+	path = inventory-impl
+	url = git@github.com:artifexlabs/inventory-impl.git

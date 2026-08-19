@@ -37,10 +37,21 @@ jobs:
         run: git config --global url."https://github.com/".insteadOf "git@github.com:"
       # GITHUB_TOKEN is scoped to this repo only; the submodules are private
       # sibling repos, so cloning them needs SUBMODULE_TOKEN — a fine-grained
-      # PAT with contents:read on the inventory-* repos.
+      # PAT with contents:read on the inventory-* repos. NOTE (2026-08-19):
+      # inventory-parent/api/impl moved to the artifexlabs org, so the PAT
+      # must grant contents:read there too, or their checkout fails.
       - uses: actions/checkout@v5
         with:
           submodules: recursive
           token: ${{ secrets.SUBMODULE_TOKEN || github.token }}
-      - name: Build and test all modules
+      # The lib submodules are NOT reactor modules (MAVEN_RELEASES.md): build
+      # and install them in dependency order, then the app reactor consumes
+      # them from the local repository. artifex-maven-parent resolves from
+      # Central (io.artifexlabs.parents:artifex-maven-parent:2).
+      - name: Build and install the libs (parent -> api -> impl)
+        run: |
+          for d in inventory-parent inventory-api inventory-impl; do
+            mvn -B -ntp -f "$d/pom.xml" install
+          done
+      - name: Build and test the app modules
         run: mvn -B -ntp verify

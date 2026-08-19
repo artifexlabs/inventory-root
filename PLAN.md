@@ -428,7 +428,7 @@ rather than an emergency patch.
   explicitly OUT (they are functional artifacts with their own golden-file
   discipline).
 
-### Phase 19 — Maven artifact extraction: parent/api/impl release independently *(added 2026-08-17; STAGED, not scheduled — full plan in [MAVEN_RELEASES.md](MAVEN_RELEASES.md), which moves into this file as milestones when the work is picked up)*
+### Phase 19 — Maven artifact extraction: parent/api/impl release independently *(added 2026-08-17; PARTIALLY EXECUTED 2026-08-18/19 — the three left the reactor with literal versions in artifexlabs-org repos (still workspace submodules), `just libs` builds them ahead of the app reactor, artifex-maven-parent 2 pinned from Central; full status in [MAVEN_RELEASES.md](MAVEN_RELEASES.md))*
 - Activates Phase 14's revisit clause (an external consumer of the jars now
   exists by intent): inventory-parent, inventory-api, and inventory-impl
   leave the reactor and its `${revision}`, gaining literal versions released

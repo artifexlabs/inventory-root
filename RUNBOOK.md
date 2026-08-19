@@ -16,7 +16,7 @@ output.
 | Runbook section | Recipe(s) |
 |---|---|
 | Build native images | `just native <module>` · `just natives` · `just images` · `just build-all` |
-| Remove build output | `just clean` *(this workspace's four app modules)* · `just clean-libs` *(the peer lib repos `../inventory-parent`, `../inventory-api`, `../inventory-impl` — never `../artifex-parent`)* |
+| Remove build output | `just clean` *(the four app modules)* · `just clean-libs` *(the lib submodules `inventory-parent`, `inventory-api`, `inventory-impl` — never `../artifex-parent`)* |
 | JVM build + tests | `just verify` *(builds the lib repos in order via `just libs`, then `mvn -B verify` on the app reactor)* |
 | Bring up / tear down | `just up` · `just ps` · `just logs [service]` · `just down` · `just destroy` *(confirm-gated)* |
 | Smoke flow | `just smoke` *(asserts each step, ends `SMOKE PASS`)* |
@@ -125,7 +125,7 @@ docker compose --project-directory . -f deploy/docker-compose.yml up -d
 ## Migrations (day-2)
 
 Forward: add a changeset (with rollback) under
-`../inventory-impl/src/main/resources/db/changeset/` (the impl peer repo), include it in
+`inventory-impl/src/main/resources/db/changeset/`, include it in
 `db/changelog-master.yaml`, then `docker compose --project-directory . -f deploy/docker-compose.yml run --rm migrate` (or just
 `up -d` — migrate always runs before the server).
 
