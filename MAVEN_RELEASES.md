@@ -127,16 +127,17 @@ Maven artifacts via maven-release-plugin, with the apps consuming them.*
 
 ## Blockers this created
 
-1. **CI: RESOLVED in design 2026-08-19 (needs one secrets check).** The
+1. **CI: FULLY RESOLVED 2026-08-19** (run 32252083378 green end to end:
+   checkout, lib chain, artifex 2 from Central, reactor verify). The
    reversal restored parent/api/impl as submodules, so CI checks them out
-   again and builds them from source (ci.yml now runs the same
-   parent → api → impl install chain as `just libs` before the reactor);
-   artifex-maven-parent resolves from Central. Remaining risk: the
-   fine-grained `SUBMODULE_TOKEN` PAT was scoped to the mykelalvis
-   `inventory-*` repos — it must also grant `contents:read` on the three
-   **artifexlabs** repos or their checkout fails. Publishing to GitHub
-   Packages is no longer a CI prerequisite; it returns to being step 2's
-   SNAPSHOT-channel work.
+   again and builds them from source (ci.yml runs the same
+   parent → api → impl install chain as `just libs` before the reactor).
+   The token risk retired itself: the owner made the three artifexlabs
+   repos PUBLIC ("that's where they'll be eventually anyway" — consistent
+   with the Central destination, which publishes source regardless), so
+   the default token clones them. Publishing to GitHub Packages is no
+   longer a CI prerequisite; it returns to being step 2's SNAPSHOT-channel
+   work.
 2. **artifex-maven-parent pin: FULLY RESOLVED 2026-08-19** —
    `io.artifexlabs.parents:artifex-maven-parent:2` is released ON MAVEN
    CENTRAL and inventory-parent pins it. (Standing rule unchanged: artifex
