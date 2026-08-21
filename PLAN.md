@@ -1735,7 +1735,18 @@ free. Item 4 is standalone.
       unit-pinned at 62 raster lines), so those labels scan in any generic
       camera app; the hardware check is one print + phone scan, and the
       module density is already proven by the 9 mm gate. Print discipline
-      applies.)* - Make the smallest possible QR code for an object
+      applies. **12 MM HARDWARE GATE PASSED 2026-08-21**: one auto label at
+      62 raster lines, phone camera decoded the exact URL. **NAMED FORMATS
+      REWORKED same day** (owner: Brother formats get names like Zebra's):
+      `9mm-id-only` (bare-ULID code), `12mm-qr` (URL code), `24mm` (the
+      QR + name/id wide layout), and the NEW `12mm` compact strip — QR +
+      name + printed date + weight when present + a bold `H` in the
+      lower-right corner for heavy items. Each name binds to its tape
+      width and REFUSES on mismatch (a wrong-width raster prints garbage);
+      `qr-only` survives as the width-independent force-flag; automatic
+      (null) behavior unchanged. Unit-pinned in BrotherPTouchPrinterTest
+      (15 tests) + LabelComposerTest compact-strip assertions; `12mm`
+      metal check pending next print session.)* - Make the smallest possible QR code for an object
       so that we could just attach the QR code to something very small.  The QR code should reference
       just like the original one, but it's possible that we could make one slightly smaller that
       the phone camera could still scan.  That will need experimentation.

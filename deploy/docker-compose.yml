@@ -87,7 +87,9 @@ services:
       # after-commit domain facts keep flowing to consumers (exporter)
       INVENTORY_EVENTS_BUS: clustered
       # Label printer (Phase 9): defaults to the log printer; .env selects
-      # hardware (brother-p750w uses tape-mm; zebra-gk420t uses format).
+      # hardware (brother-p750w uses tape-mm + optional named format:
+      # 9mm-id-only | 12mm-qr | 12mm | 24mm | qr-only; zebra-gk420t uses
+      # format: standard | large | x-large | 2x-large).
       INVENTORY_PRINTER: ${INVENTORY_PRINTER:-log}
       INVENTORY_PRINTER_HOST: ${INVENTORY_PRINTER_HOST:-}
       INVENTORY_PRINTER_PORT: ${INVENTORY_PRINTER_PORT:-9100}
