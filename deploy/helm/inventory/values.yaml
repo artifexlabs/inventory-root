@@ -1,14 +1,12 @@
-# Released images from the private GHCR namespace (PLAN.md Phase 14).
+# Released images from the PUBLIC Docker Hub namespace (2026-08-21;
+# formerly private GHCR — no pull secret needed anymore).
 image:
-  owner: mykelalvis
+  registry: docker.io/artifexlabs
   # the platform release: vX.Y.Z without the v
   tag: latest
   pullPolicy: IfNotPresent
-# The GHCR packages are PRIVATE: create a pull secret first, e.g.
-#   kubectl create secret docker-registry ghcr \
-#     --docker-server=ghcr.io --docker-username=<user> --docker-password=<read:packages token>
-imagePullSecrets:
-  - name: ghcr
+# Public images: pull secrets only if you mirror to a private registry.
+imagePullSecrets: []
 
 # Secrets land in one Secret object; CHANGE ALL FOUR outside dev.
 postgresPassword: inventory

@@ -389,10 +389,21 @@ SUPERPROJECT REACTOR (release model: v-tag -> images; destination moves
    owner directive until fully prepared: `release:prepare` dry-run, real
    releases of parent → api → impl-root, BOM re-pinned to them and
    deployed, apps switched from parent-dM versions to the BOM import.
-4. **Deploy-side payoff.** Migrate consumption switches to the versioned
-   changelog (an `inventory-migrate` image or changelog-from-jar extraction)
-   across compose/Nomad/Helm; the Helm copy rule and Nomad checkout mount
-   retire.
+4. **Deploy-side payoff.** ***DONE 2026-08-21***: the `inventory-migrate`
+   image (Dockerfile in inventory-impl-changeset: Liquibase 4.29 + the
+   changeset JAR on the classpath — true changelog-from-jar, no
+   --search-path) replaced every mount/copy scheme. Compose builds it
+   locally (`inventory-migrate:local`, release overlay pins
+   `artifexlabs/inventory-migrate:<version>`); release.yml publishes it as
+   the FIFTH image; the Nomad checkout mount (and its docker volumes
+   plugin requirement) is gone; the Helm hand-copied ConfigMap, its
+   `files/changelog/` copies, and the drift rule are DELETED — the chart's
+   migrate Job runs the image. The Helm chart and Nomad job also completed
+   their GHCR→Docker Hub migration here (public images, pull secrets
+   retired). Verified live: `just migrate` (--build) against the real
+   database read the changelog from the jar — 5/5 changesets recognized,
+   idempotent no-op. New-changeset workflow: edit under the changeset
+   module → `just libs` → `just migrate` (RUNBOOK).
 5. ~~Gate: the release-destination decision.~~ **RESOLVED 2026-08-21 by
    owner decision: Maven Central, public, `io.artifexlabs.inventory`, via
    the `infrastructurebuilder` account and its signing keys; release
@@ -407,7 +418,9 @@ SUPERPROJECT REACTOR (release model: v-tag -> images; destination moves
   central-publishing plugin produces a valid, signed bundle.
 - Step 3: `release:prepare -DdryRun=true` clean on all three repos; after
   real releases, the app reactor builds against BOM pins only.
-- Step 4: `just smoke` green on compose with the migrate path consuming the
-  versioned changelog; Helm README's copy rule deleted.
+- Step 4 *(done 2026-08-21)*: the migrate container consumed the changelog
+  from the jar against the real database (5/5 recognized, idempotent
+  no-op); Helm README's copy rule deleted. Full-stack `just smoke` on
+  freshly rebuilt images rides along with the next deploy/release.
 
 [UPC_CODE.md]: PLAN.md

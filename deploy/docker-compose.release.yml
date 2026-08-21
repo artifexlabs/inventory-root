@@ -10,6 +10,9 @@
 # are public — no login needed to pull.
 services:
 
+  migrate:
+    image: docker.io/artifexlabs/inventory-migrate:${INVENTORY_VERSION:-latest}
+
   inventory-server:
     image: docker.io/artifexlabs/inventory-server:${INVENTORY_VERSION:-latest}
 

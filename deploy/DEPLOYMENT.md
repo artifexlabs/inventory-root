@@ -21,9 +21,9 @@ is available:
   two-process dev setup below). UNVALIDATED by decision — no Nomad cluster
   exists yet; double-checked against the compose file.
 - `helm/inventory/` — the Kubernetes reference chart: pod-IP bus members
-  discovering through ClusterIP DNS, a Liquibase hook Job, postgres
-  StatefulSet. UNVALIDATED by decision — see its README for the changelog
-  copy rule and pull-secret setup.
+  discovering through ClusterIP DNS, a migrate hook Job (the
+  inventory-migrate image — changelog-from-jar), postgres StatefulSet.
+  UNVALIDATED by decision.
 
 ## What gets deployed
 
@@ -68,7 +68,7 @@ iOS app ──HTTP──▶ inventory-web-api (:8081, JVM)     ◀── the ONL
 | `INVENTORY_PRINTER` / `INVENTORY_PRINTER_HOST` / `..._PORT` / `..._TAPE_MM` | `log` / – / `9100` / `24` | hardware label printer (Brother PT-P750W); consumed by inventory-server |
 | `INVENTORY_CATALOG` | `open-facts,upcitemdb` | external UPC catalog sources for scan-to-create prefill (Phase 17), ordered; `off` disables lookups — creation still works from typed fields. The ONLY external calls the stack ever makes. |
 | `INVENTORY_VERSION` | `latest` | released deploys only (see below) |
-| `INVENTORY_GHCR_OWNER` | `mykelalvis` | released deploys only |
+
 
 ## Deploying the dev versions
 
@@ -139,49 +139,47 @@ docker compose --project-directory . -f deploy/docker-compose.yml exec postgres 
 
 ## Deploying the released versions
 
-A release is a superproject tag; its deliverables are the four container images
-in the **private** GHCR namespace `ghcr.io/<owner>/inventory-root/<module>:<version>`
-(PLAN.md Phase 14 decision — mobile releases live on separate store tracks and
-are not part of this stack). Until the Phase 14 `release.yml` automation is
-built, images are produced and pushed manually; the deploy method on the target
-host is identical either way.
+A release is a superproject tag; its deliverables are the five container
+images in the **public** Docker Hub namespace
+`docker.io/artifexlabs/<module>:<version>` (decided 2026-08-21 — the four
+apps plus `inventory-migrate`; mobile releases live on separate store
+tracks and are not part of this stack). Pushing the tag runs `release.yml`,
+which builds and publishes them; the manual flow below is the fallback.
 
 ### Producing a release (build host, manual until Phase 14 executes)
 
 ```sh
 VERSION=0.1.0          # the release being cut
-OWNER=mykelalvis
+NS=docker.io/artifexlabs
 
 # 1. From the release tag, clean build + full verification
 git checkout "v${VERSION}" && git submodule update --init
-mvn -B verify
+just verify
 
-# 2. Build the artifacts and images
+# 2. Build the artifacts and images (includes inventory-migrate:local)
 just build-all
 
-# 3. Tag and push into the private inventory-root namespace
+# 3. Tag and push into the public artifexlabs namespace (docker login first)
 for m in inventory-server inventory-web-api inventory-exporter; do
-  docker tag  ${m}:jvm  ghcr.io/${OWNER}/inventory-root/${m}:${VERSION}
-  docker push ghcr.io/${OWNER}/inventory-root/${m}:${VERSION}
+  docker tag  ${m}:jvm  ${NS}/${m}:${VERSION}
+  docker push ${NS}/${m}:${VERSION}
 done
-docker tag  inventory-web-app:native ghcr.io/${OWNER}/inventory-root/inventory-web-app:${VERSION}
-docker push ghcr.io/${OWNER}/inventory-root/inventory-web-app:${VERSION}
-
-# 4. Verify every package shows Private visibility in the GitHub UI (packages
-#    inherit weird defaults; this gate is manual and mandatory).
+docker tag  inventory-web-app:native ${NS}/inventory-web-app:${VERSION}
+docker push ${NS}/inventory-web-app:${VERSION}
+docker tag  inventory-migrate:local  ${NS}/inventory-migrate:${VERSION}
+docker push ${NS}/inventory-migrate:${VERSION}
 ```
 
 ### Deploying a release (target host)
 
-Prerequisites: Docker + compose plugin; a GHCR token with `read:packages`;
-the repo checkout **at the release tag** (it carries the compose files AND the
-Liquibase changelogs the `migrate` service mounts):
+Prerequisites: Docker + compose plugin; the repo checkout **at the release
+tag** (it carries the compose files; the Liquibase changelogs arrive inside
+the public `inventory-migrate` image — nothing is mounted and no registry
+token is needed):
 
 ```sh
 git clone --recurse-submodules git@github.com:mykelalvis/inventory-root.git inventory
 cd inventory && git checkout "v${VERSION}" && git submodule update --init inventory-impl
-
-docker login ghcr.io          # user + read:packages token
 
 cat > .env <<'EOF'            # real secrets, never the dev defaults
 POSTGRES_PASSWORD=<strong>
@@ -196,7 +194,7 @@ docker compose --project-directory . -f deploy/docker-compose.yml -f deploy/dock
 just smoke                    # or the curl flow in RUNBOOK.md
 ```
 
-The overlay swaps every locally built image for its versioned GHCR image and
+The overlay swaps every locally built image for its versioned Docker Hub image and
 never builds; `migrate` still runs Liquibase to completion before the server
 starts, so schema upgrades are part of every deploy.
 

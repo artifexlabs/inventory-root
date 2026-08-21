@@ -126,14 +126,19 @@ docker compose --project-directory . -f deploy/docker-compose.yml up -d
 
 Forward: add a changeset (with rollback) under
 `inventory-impl-root/inventory-impl-changeset/src/main/resources/db/changeset/`, include it in
-`db/changelog-master.yaml`, then `docker compose --project-directory . -f deploy/docker-compose.yml run --rm migrate` (or just
-`up -d` — migrate always runs before the server).
+`db/changelog-master.yaml`, rebuild the changeset jar (`just libs`), then
+`just migrate` (or `just up` — migrate always runs before the server).
+The migrate container is the `inventory-migrate` image — Liquibase with the
+changeset JAR on its classpath (no bind mount); `just migrate` passes
+`--build` so the image refreshes from the current jar.
 
 Backward:
 ```sh
-docker compose --project-directory . -f deploy/docker-compose.yml run --rm migrate --url=jdbc:postgresql://postgres:5432/inventory \
+just rollback 1   # confirm-gated; also --build
+# raw form:
+docker compose --project-directory . -f deploy/docker-compose.yml run --rm --build migrate --url=jdbc:postgresql://postgres:5432/inventory \
   --username=inventory --password=$POSTGRES_PASSWORD \
-  --search-path=/liquibase/changelog --changelog-file=db/changelog-master.yaml \
+  --changelog-file=db/changelog-master.yaml \
   rollback-count 1
 ```
 

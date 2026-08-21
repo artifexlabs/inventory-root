@@ -29,12 +29,14 @@ spec:
             - until pg_isready -h postgres -U inventory -d inventory; do sleep 2; done
       containers:
         - name: migrate
-          image: liquibase/liquibase:4.29
+          # the versioned schema: Liquibase + the inventory-impl-changeset
+          # jar on its classpath (changelog-from-jar) — the hand-copied
+          # ConfigMap and its drift rule are gone.
+          image: {{ include "inventory.image" (dict "root" . "module" "inventory-migrate") }}
           args:
             - --url=jdbc:postgresql://postgres:5432/inventory
             - --username=inventory
             - --password=$(POSTGRES_PASSWORD)
-            - --search-path=/liquibase/changelog
             - --changelog-file=db/changelog-master.yaml
             - update
           env:
@@ -43,27 +45,3 @@ spec:
                 secretKeyRef:
                   name: inventory-secrets
                   key: postgres-password
-          volumeMounts:
-            - name: changelog
-              mountPath: /liquibase/changelog
-              readOnly: true
-      volumes:
-        - name: changelog
-          configMap:
-            name: inventory-changelog
-            # the ConfigMap is flat (basename keys); rebuild the db/ tree the
-            # master changelog's include paths expect. A NEW changeset needs
-            # a new item here AND a fresh copy under files/changelog/.
-            items:
-              - key: changelog-master.yaml
-                path: db/changelog-master.yaml
-              - key: 001-core.yaml
-                path: db/changeset/001-core.yaml
-              - key: 002-assets.yaml
-                path: db/changeset/002-assets.yaml
-              - key: 003-identity.yaml
-                path: db/changeset/003-identity.yaml
-              - key: 004-audit.yaml
-                path: db/changeset/004-audit.yaml
-              - key: 005-item-identities.yaml
-                path: db/changeset/005-item-identities.yaml

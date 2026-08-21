@@ -33,29 +33,34 @@
   <description>The anti-skew BOM (MAVEN_RELEASES.md): pins ONE coherent,
     CI-verified version set of the inventory library artifacts. Consumers
     import this instead of picking api/impl versions independently — only
-    combinations a build actually tested ever deploy. Versions are literal
-    on purpose: the published BOM must stand alone.</description>
+    combinations a build actually tested ever deploy. Version properties are literal
+    on purpose: the published BOM must stand alone.
+    </description>
+    <properties>
+      <inventory.api.version>0.1.0-SNAPSHOT</inventory.api.version>
+      <inventory.impl.version>0.1.0-SNAPSHOT</inventory.impl.version>      
+    </properties>
   <dependencyManagement>
     <dependencies>
       <dependency>
         <groupId>io.artifexlabs.inventory</groupId>
         <artifactId>inventory-api</artifactId>
-        <version>0.1.0-SNAPSHOT</version>
+        <version>${inventory.api.version}</version>
       </dependency>
       <dependency>
         <groupId>io.artifexlabs.inventory</groupId>
         <artifactId>inventory-impl</artifactId>
-        <version>0.1.0-SNAPSHOT</version>
+        <version>${inventory.impl.version}</version>
       </dependency>
       <dependency>
         <groupId>io.artifexlabs.inventory</groupId>
         <artifactId>inventory-impl-pg</artifactId>
-        <version>0.1.0-SNAPSHOT</version>
+        <version>${inventory.impl.version}</version>
       </dependency>
       <dependency>
         <groupId>io.artifexlabs.inventory</groupId>
         <artifactId>inventory-impl-changeset</artifactId>
-        <version>0.1.0-SNAPSHOT</version>
+        <version>${inventory.impl.version}</version>
       </dependency>
     </dependencies>
   </dependencyManagement>

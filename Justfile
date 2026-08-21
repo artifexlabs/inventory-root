@@ -418,21 +418,23 @@ restore file:
     @just ps
 
 # Apply pending Liquibase changesets (idempotent; also runs on every `just up`).
+# --build refreshes the inventory-migrate image from the changeset jar; a NEW
+# changeset therefore needs `just libs` (rebuild the jar) before this.
 [group('day2')]
 migrate:
-    {{ compose }} run --rm migrate
+    {{ compose }} run --rm --build migrate
 
 # Roll back the last N changesets.
 [group('day2')]
 [confirm("Rolling back applied changesets. Continue? (y/N)")]
 rollback count="1":
-    {{ compose }} run --rm migrate \
+    {{ compose }} run --rm --build migrate \
       --url=jdbc:postgresql://postgres:5432/inventory \
       --username=inventory --password={{ pg_password }} \
-      --search-path=/liquibase/changelog --changelog-file=db/changelog-master.yaml \
+      --changelog-file=db/changelog-master.yaml \
       rollback-count {{ count }}
 
-# --- release (Phase 14: tag-driven images to private GHCR) --------------------
+# --- release (Phase 14 flow: tag-driven images to public Docker Hub) ----------
 
 # Show what `just release <version>` would do — checks only, no verify, no tags.
 [group('release')]

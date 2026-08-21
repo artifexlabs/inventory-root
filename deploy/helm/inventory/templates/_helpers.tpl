@@ -5,7 +5,7 @@ app.kubernetes.io/managed-by: {{ .Release.Service }}
 app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end }}
 
-{{/* The GHCR image reference for a module. Usage: include "inventory.image" (dict "root" . "module" "inventory-server") */}}
+{{/* The Docker Hub image reference for a module. Usage: include "inventory.image" (dict "root" . "module" "inventory-server") */}}
 {{- define "inventory.image" -}}
-ghcr.io/{{ .root.Values.image.owner }}/inventory-root/{{ .module }}:{{ .root.Values.image.tag }}
+{{ .root.Values.image.registry }}/{{ .module }}:{{ .root.Values.image.tag }}
 {{- end }}

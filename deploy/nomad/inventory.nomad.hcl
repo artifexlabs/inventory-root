@@ -15,9 +15,8 @@
 # (exporter) are published; JGroups 7800-7802 and bus 15701-15703 stay inside
 # the allocation's network namespace. Bus membership is access.
 #
-# Images are the released GHCR images (private): the client node needs docker
-# credentials for ghcr.io (docker login on the node, or add an `auth` block
-# to each task). Run:
+# Images are the released PUBLIC Docker Hub images (docker.io/artifexlabs,
+# 2026-08-21) — no registry credentials needed on the client node. Run:
 #
 #   nomad job run -var version=<X.Y.Z> deploy/nomad/inventory.nomad.hcl
 #
@@ -30,9 +29,10 @@ variable "version" {
   description = "Released image tag (PLAN.md Phase 14): vX.Y.Z without the v."
 }
 
-variable "ghcr_owner" {
-  type    = string
-  default = "mykelalvis"
+variable "image_namespace" {
+  type        = string
+  default     = "docker.io/artifexlabs"
+  description = "Public Docker Hub namespace for released images (2026-08-21; formerly private GHCR)."
 }
 
 variable "postgres_password" {
@@ -124,9 +124,9 @@ job "inventory" {
     # Liquibase runs to completion before the main tasks start (prestart,
     # NOT sidecar). It races postgres's first boot, so failures retry until
     # the database answers — the compose depends_on translated to a restart
-    # policy. Changelogs ship inside... nowhere on a Nomad client: mount the
-    # inventory-impl-changeset resources from a checkout on the node, exactly like the
-    # compose bind mount (set the path for your node below).
+    # policy. The changelogs ship INSIDE the inventory-migrate image (the
+    # inventory-impl-changeset jar on Liquibase's classpath) — no node
+    # checkout, no bind mount, no docker volumes plugin config needed.
     task "migrate" {
       driver = "docker"
 
@@ -143,21 +143,13 @@ job "inventory" {
       }
 
       config {
-        image = "liquibase/liquibase:4.29"
+        image = "${var.image_namespace}/inventory-migrate:${var.version}"
         args = [
           "--url=jdbc:postgresql://127.0.0.1:5432/inventory",
           "--username=inventory",
           "--password=${var.postgres_password}",
-          "--search-path=/liquibase/changelog",
           "--changelog-file=db/changelog-master.yaml",
           "update",
-        ]
-        # a checkout of inventory-impl-root on the client node (repo at the
-        # tag being deployed — the same rule as the compose release deploy).
-        # Docker-driver bind mounts require the client's plugin config:
-        #   plugin "docker" { config { volumes { enabled = true } } }
-        volumes = [
-          "/opt/inventory/checkout/inventory-impl-root/inventory-impl-changeset/src/main/resources:/liquibase/changelog:ro",
         ]
       }
 
@@ -173,7 +165,7 @@ job "inventory" {
       driver = "docker"
 
       config {
-        image = "ghcr.io/${var.ghcr_owner}/inventory-root/inventory-server:${var.version}"
+        image = "${var.image_namespace}/inventory-server:${var.version}"
       }
 
       env {
@@ -207,7 +199,7 @@ job "inventory" {
       driver = "docker"
 
       config {
-        image = "ghcr.io/${var.ghcr_owner}/inventory-root/inventory-web-api:${var.version}"
+        image = "${var.image_namespace}/inventory-web-api:${var.version}"
         ports = ["web_api"]
       }
 
@@ -234,7 +226,7 @@ job "inventory" {
       driver = "docker"
 
       config {
-        image = "ghcr.io/${var.ghcr_owner}/inventory-root/inventory-exporter:${var.version}"
+        image = "${var.image_namespace}/inventory-exporter:${var.version}"
         ports = ["exporter"]
       }
 
@@ -261,7 +253,7 @@ job "inventory" {
       driver = "docker"
 
       config {
-        image = "ghcr.io/${var.ghcr_owner}/inventory-root/inventory-web-app:${var.version}"
+        image = "${var.image_namespace}/inventory-web-app:${var.version}"
         ports = ["web_app"]
       }
 

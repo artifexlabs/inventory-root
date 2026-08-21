@@ -47,21 +47,23 @@ services:
       timeout: 2s
       retries: 15
 
-  # Controlled schema migration (the day-2 path): Liquibase CLI over the
-  # changelogs in the inventory-impl-changeset module (changelog-in-jar is
-  # the staged replacement for this mount — MAVEN_RELEASES.md). Runs to
-  # completion, then exits.
+  # Controlled schema migration (the day-2 path): the inventory-migrate
+  # image — Liquibase + the inventory-impl-changeset JAR on its classpath
+  # (changelog-from-jar, MAVEN_RELEASES.md step 4; the bind mount is gone).
+  # Build the changeset module first (`just libs`) so the jar exists; the
+  # `just migrate`/`just rollback` recipes pass --build to stay fresh.
+  # Runs to completion, then exits.
   migrate:
-    image: liquibase/liquibase:4.29
+    build:
+      context: inventory-impl-root/inventory-impl-changeset
+      dockerfile: src/main/docker/Dockerfile.migrate
+    image: inventory-migrate:local
     depends_on:
       postgres:
         condition: service_healthy
-    volumes:
-      - ./inventory-impl-root/inventory-impl-changeset/src/main/resources:/liquibase/changelog:ro
     command: >
       --url=jdbc:postgresql://postgres:5432/inventory
       --username=inventory --password=${POSTGRES_PASSWORD:-inventory}
-      --search-path=/liquibase/changelog
       --changelog-file=db/changelog-master.yaml
       update
 
