@@ -177,6 +177,46 @@ storage.<aggregate>.<op>      send: CRUD/domain ops -> reply payload
   follow-on with its own infrastructure, and this plan's contract (the
   topic + dual-form events) is exactly what such a bridge would consume.
 
+## Module architecture: domain and bus layers as SEPARATE modules (owner-accepted 2026-08-21)
+
+The verticle/domain boundary becomes a MAVEN boundary, so the build — not
+review — enforces the isolation:
+
+```
+inventory-impl-root
+  inventory-impl-printer-common   (exists) layouts + 9100 wire, dependency-free
+  inventory-impl                  (domain) impls, memory twins, catalog, Gtin/Ulid/QrCodes
+  inventory-impl-changeset        (exists) the schema
+  inventory-impl-pg               (domain) Pg backends
+  inventory-impl-brother          (domain+verticle) driver AND its PrinterVerticle
+  inventory-impl-zebra            (domain+verticle) driver AND its PrinterVerticle
+  inventory-impl-bus       (NEW)  the EIGHT verticles, ServiceVerticle/BusGuard,
+                                  BusEnvelope + Default* wire types, BusWorkers
+                                  — depends on api + vertx-core ONLY
+```
+
+- **The enforced rule, stated precisely**: domain modules carry NO event
+  bus, NO verticle lifecycle, NO envelope types (compiler-checked: no
+  inventory-impl-bus dependency, and core/pg lose vertx-core where it was
+  only there for the bus). "Vertx-free domain" is deliberately NOT the
+  rule — the Pg data plane IS the vertx pg-client and stays that way.
+- **The bus module is interface-pure**: measured 2026-08-21, the eight
+  verticles import exactly five non-api impl types (Gtin, Ulid, QrCodes,
+  UserStore, CatalogImages) and zero storage impls. UserStore (an
+  interface) promotes to api; the small utilities either promote or ride
+  behind api seams — after which inventory-impl-bus cannot see Pg vs
+  memory even if it tries.
+- **Per-verticle module PAIRS were considered and rejected**: ~16 modules
+  delivering the identical compiler guarantee the single layer boundary
+  gives, at the cost of poms, BOM entries, and a reactor nobody holds in
+  their head. The one future exception: a print-station node wanting
+  driver-only vs verticle-only vendor artifacts — revisit the vendor
+  modules IF that topology becomes real.
+- Tests layer with the modules: pure-domain tests (and the Phase 20 parity
+  TCK target) in the domain modules; protocol/verticle unit tests plus
+  bus-level integration (including the bus parity layer) in
+  inventory-impl-bus.
+
 ## Staged steps (each a milestone-sized chunk)
 
 1. **StatusEvent fabric** — the record + emitting helper in api/impl, the
@@ -186,20 +226,26 @@ storage.<aggregate>.<op>      send: CRUD/domain ops -> reply payload
 2. **SSE gateway + web-app surfacing** — the authenticated stream endpoint
    with actor-scoping and the reconnect ring; web-app toasts. First
    user-visible payoff. *Medium.*
-3. **Printer verticles** — packet schema in printer-common, per-vendor
-   verticles, LabelsVerticle re-plumbed, producers stop constructing
-   printers, fetch-back path. Hardware smoke re-run (print discipline
-   applies). *Medium.*
-4. **Storage verticle** — `storage.*` operations, backends move behind it,
+3. **inventory-impl-bus extraction** — the module architecture above:
+   verticles + envelope machinery move to the new module; UserStore and
+   the utility seams promote; domain modules drop bus knowledge. Pure
+   mechanical move done BEFORE the verticle rework so steps 4–5 rewire
+   each verticle once, in its final home. *Medium.*
+4. **Printer verticles** — packet schema in printer-common, per-vendor
+   verticles in the vendor modules, LabelsVerticle re-plumbed, producers
+   stop constructing printers, fetch-back path. Hardware smoke re-run
+   (print discipline applies). *Medium.*
+5. **Storage verticle** — `storage.*` operations, backends move behind it,
    every other verticle re-plumbed to speak bus-storage; bus-level parity
-   tests. The largest and riskiest step; do LAST, with the StatusEvent
-   fabric already there to watch it. *Large.*
-5. **Mobile connection** — iOS SSE client + banners (Android when the app
+   tests in inventory-impl-bus. The largest and riskiest step; do LAST,
+   with the StatusEvent fabric already there to watch it. *Large.*
+6. **Mobile connection** — iOS SSE client + banners (Android when the app
    exists). *Small-medium, gated on step 2.*
 
 Order rationale: 1 → 2 give observable value fast and instrument
-everything; 3 exercises the packet/ack/StatusEvent pattern on the smallest
-seam; 4 rides on all of it.
+everything; 3 makes the isolation structural before anything is rewired;
+4 exercises the packet/ack/StatusEvent pattern on the smallest seam; 5
+rides on all of it.
 
 ## Costs and risks (recorded up front)
 
@@ -230,13 +276,16 @@ seam; 4 rides on all of it.
    populated; envelope schema round-trips.
 2. SSE: two users, crossed actions — each sees only their own events;
    reconnect with `Last-Event-ID` replays the gap; admin opt-in sees both.
-3. Fake-printer smoke (`just smoke-fake-printer`) passes over the bus path;
+3. Extraction: full reactor green; `mvn dependency:tree` shows
+   inventory-impl-bus without core/pg, and domain modules without
+   inventory-impl-bus; jandex/Quarkus archives intact in the apps.
+4. Fake-printer smoke (`just smoke-fake-printer`) passes over the bus path;
    a tape-mismatch print returns accepted:false-or-refusal AND lands as a
    StatusEvent in the SSE stream; then the hardware gates re-run.
-4. Full parity suite green with every verticle speaking `storage.*`; the
+5. Full parity suite green with every verticle speaking `storage.*`; the
    torn-tx canary (create-with-identity under injected failure) proves
    atomicity survived; `just verify` + stack smoke.
-5. iOS: banner appears within ~2 s of a forced printer refusal while the
+6. iOS: banner appears within ~2 s of a forced printer refusal while the
    app is foregrounded.
 
 [UPC_CODE.md]: PLAN.md
