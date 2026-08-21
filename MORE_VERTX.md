@@ -352,6 +352,34 @@ inventory-impl-root
     vocabulary so no external caller can name them. Verified structurally:
     all nine public verticles now reference zero backend types.
 
+- **Steps 2 (second half) and 6 DONE 2026-08-21** (feature
+  `more-vertx-live-status`): the events are now VISIBLE to people.
+  - **Web app**: `StatusStreamResource` proxies the gateway stream at
+    `/events/stream`. The browser cannot connect upstream directly —
+    `EventSource` cannot set an Authorization header, and a token in a query
+    string would leak into logs and history — so the BFF, which already
+    holds the session, opens the authenticated stream itself. The API token
+    never reaches the browser.
+  - **The SSE naming collision, and the fix**: the gateway names events by
+    severity, which is right for programmatic consumers, but in a browser an
+    event literally named `error` collides with `EventSource`'s own
+    connection-error event. The proxy therefore re-emits unnamed (default
+    `message`) events with the severity inside the JSON, and the page reads
+    it from there.
+  - Toasts stack bottom-right in `base.html`, colour-coded, with the
+    `detail` behind a disclosure. Errors have NO timeout — a failure the
+    user never read is a failure they never learned about — while warnings
+    and notices fade.
+  - **iOS**: `StatusStream` keeps an SSE connection while the app is
+    foregrounded (minimal SSE framing over `URLSession.bytes`, reconnect
+    with exponential backoff, `Last-Event-ID` replay), and `StatusBanners`
+    overlays the item list. Foreground-only is deliberate: waking a
+    backgrounded app would mean APNs, which is separate infrastructure and
+    explicitly out of this plan's scope — the topic and dual-form events are
+    exactly what such a bridge would consume later.
+  - Remaining gate (manual, needs hardware): force a printer refusal and
+    confirm a banner appears within ~2 s while foregrounded.
+
 ## Staged steps (each a milestone-sized chunk)
 
 1. **StatusEvent fabric** — the record + emitting helper in api/impl, the
