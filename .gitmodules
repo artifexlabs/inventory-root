@@ -22,3 +22,6 @@
 [submodule "inventory-api"]
 	path = inventory-api
 	url = git@github.com:artifexlabs/inventory-api.git
+[submodule "inventory-bom"]
+	path = inventory-bom
+	url = git@github.com:artifexlabs/inventory-bom.git

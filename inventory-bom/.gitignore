@@ -1,6 +1,0 @@
-.*
-!.gitignore
-.idea/**
-*.iml
-target
-pom.xml.*

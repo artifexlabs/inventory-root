@@ -194,12 +194,15 @@ acceptable and overwritable).
 - **maven-release-plugin configured** via pluginManagement:
   `tagNameFormat=v@{project.version}`, `releaseProfiles=release`,
   `autoVersionSubmodules=true` (the impl-root train), `signTag=true`.
-- **inventory-bom EXISTS** as a reactor module of inventory-root (owner
-  decision: the BOM code belongs in the inventory-root repo): literal
-  `0.1.0-SNAPSHOT`, pinning api/impl/impl-pg/impl-changeset at their
-  literal versions. The apps do NOT import it yet — they stay on the
-  parent's dependencyManagement until step 3 makes the pins RELEASED
-  versions.
+- **inventory-bom EXISTS**: literal `0.1.0-SNAPSHOT`, pinning the api and
+  impl artifacts at literal versions. *(Started as a reactor module of
+  inventory-root; **moved 2026-08-21 to its own public repo**
+  `git@github.com:artifexlabs/inventory-bom.git`, a submodule at the same
+  path — a released artifact needs its own release ceremony, which the app
+  reactor's tag→images flow does not provide. It inherits inventory-parent
+  and now carries the same `scm`/`url`/`distributionManagement` metadata as
+  api and impl-root, so `release:prepare`/`perform` work identically. It
+  joins the `just libs` / ci.yml chain LAST, since the apps import it.)*
 - **release.yml migrated to Docker Hub**: images push to the public
   `artifexlabs` namespace (login via a repo secret; the credential itself
   is held by the owner and not recorded anywhere in the codebase). The
@@ -237,6 +240,9 @@ permanent fixes:
      was local-only, nothing pushed); re-release runs from the clean pom.
    - Per-release pin points now: impl-root's `inventory.api.version`, the
      BOM's version properties, and each app's one-line BOM import version.
+     *(The BOM's missing release ceremony closed 2026-08-21: it is its own
+     repo with release config, so step 3's fourth link is a normal
+     `release:prepare release:perform` like the others.)*
 
 ## Blockers this created
 

@@ -38,12 +38,12 @@ ios_simulator := env('INVENTORY_IOS_SIMULATOR', 'iPhone 17')
 compose := "docker compose --project-directory . -f deploy/docker-compose.yml"
 
 # The extracted library repos (MAVEN_RELEASES.md), built IN THIS ORDER before
-# the reactor: api -> impl. They are workspace submodules (artifexlabs-org
+# the reactor: api -> impl -> bom. They are workspace submodules (artifexlabs-org
 # repos) but deliberately NOT reactor modules — they install to ~/.m2 and the
 # apps consume them as jars. inventory-parent is NOT here anymore: released
 # as `1` (2026-08-21), it resolves from Central like artifex-maven-parent —
 # re-add it temporarily only while developing the NEXT parent release.
-lib_dirs := "inventory-api inventory-impl-root"
+lib_dirs := "inventory-api inventory-impl-root inventory-bom"
 
 # EVERY recipe that runs Maven tests must go through this.
 #
@@ -105,9 +105,6 @@ libs:
       echo "-> delegating to Maven: mvn -B clean install in $d (with tests)"
       {{ test_env }} mvn -B -ntp -f "$d/pom.xml" clean install
     done
-    # the BOM too: the apps IMPORT it, so -pl/isolation/dev builds must be
-    # able to resolve it from ~/.m2 (reactor builds see the module directly)
-    mvn -B -ntp -pl inventory-bom clean install
     just _invalidate-quarkus-model-cache
 
 # Quarkus serializes each app's test ApplicationModel to
@@ -173,7 +170,6 @@ _sync-libs:
       echo "-> delegating to Maven: mvn -B clean install in $d (tests skipped)"
       {{ test_env }} mvn -q -B -ntp -f "$d/pom.xml" clean install -Dmaven.test.skip=true
     done
-    mvn -q -B -ntp -pl inventory-bom clean install
     just _invalidate-quarkus-model-cache
 
 # inventory-web-api in live-coding mode on :8081 (embedded bus workers on the
