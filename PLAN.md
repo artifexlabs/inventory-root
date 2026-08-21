@@ -531,6 +531,103 @@ backend individually earns its keep.
   changelog-in-jar work stays single-sourced: one changeset artifact, all
   relational dialects inside.
 
+### Phase 21 — Deeper Vert.x: printer verticles, storage isolation, live status *(added and EXECUTED 2026-08-21 — planned via the since-retired staging doc MORE_VERTX.md; six steps, all CI-green)*
+
+Three owner asks, all delivered. The unifying requirement was that every
+status event be sendable to the consumer in BOTH forms at once — a
+human-readable notification AND a structured message machinery can parse —
+as one publication that cannot drift.
+
+- **StatusEvent, one envelope with two faces** (`inventory-api`):
+  a machine face (`code` + structured `subject`) and a human face
+  (`message` + `detail`) in a single record whose builder demands both at
+  the same call site. Published fire-and-forget to the `status.events`
+  topic, with identity stamped at PUBLICATION so ids and timestamps agree
+  with delivery order. Nine refusal paths that previously died as
+  `log.warn` now emit: Brother (tape mismatch, unknown format, no
+  scannable QR, print/batch/feed failure), Zebra (unknown format, print
+  failure), and `BusGuard` admission denials. `StatusLogVerticle` deploys
+  with the workers so the topic is never write-only. **Audit is untouched
+  and non-overlapping**: audit records committed domain facts durably;
+  status events are best-effort operational outcomes for humans-now.
+- **Printers are bus participants** (ask 1): `PrintPackets` +
+  `LabelPrinterVerticle` in `inventory-impl-printer-common` own
+  `printer.print`, `printer.print-batch`, `printer.feed`. Packets are
+  self-contained (serialized item, scan URL, format, optional QR) with a
+  documented by-reference escape hatch. The verticle is vendor-AGNOSTIC —
+  the vendor already lives in the injected `LabelPrinter` — so the vendor
+  modules stay the vendor seam. `LabelsVerticle` holds no printer: it
+  resolves, packs, sends, audits the acceptance.
+  - **The HTTP contract changed deliberately**: `print-label`,
+    `print-batch` and `labels/feed` answer **202 Accepted**
+    `{"accepted":true}`, not 204. TCP 9100 is unidirectional, so "printed"
+    was never a fact we possessed; the reply now states what is true and
+    an HTTP request no longer waits on hardware. The iOS button says
+    "Sent to printer" for the same reason. Outcomes arrive as StatusEvents.
+- **All data IO behind one door** (ask 2): `StorageVerticle` is the sole
+  holder of `InventorySystem`, `AssetStore`, `UserStore`, `TokenService`,
+  `RegionSystem`, `AuditReader` and `AuditSink`, serving them at an
+  internal, deliberately UNGUARDED `storage` address (admission already
+  happened at the public verticle that forwarded the envelope). The 47
+  handlers split by shape: six pure-IO services plus auth became storage
+  registrars whose public verticles now only `forward(...)`, while Labels
+  and Catalog stayed orchestrators reaching storage by message.
+  - **The load-bearing constraint**: bus messages cannot share a database
+    transaction, so every registered operation is one WHOLE unit of work,
+    never composable row CRUD. The catalog's item+image creation stayed a
+    single storage message precisely because splitting it would tear the
+    atomicity the Pg backend guarantees in-process.
+  - `StorageIsolationTest` (20 assertions) makes it permanent: no public
+    verticle may take or hold a backend, and the internal operations are
+    namespaced outside the public `BusActions` vocabulary.
+- **Failures reach people** (ask 3): the gateway's authenticated SSE
+  endpoint `GET /api/v1/events/stream` fans the topic out per connection
+  with **actor scoping as a security boundary** — a user sees events whose
+  `actor` is them, admins additionally see unattributed system faults, and
+  `?all=true` is honored for admins ONLY. `Last-Event-ID` replays the gap
+  from a bounded ring (100 events / 15 min); an unknown cursor replays
+  nothing rather than implying a completeness it cannot promise.
+  - The **web app proxies** the stream at `/events/stream`: `EventSource`
+    cannot set an Authorization header and a token in a query string would
+    leak into logs, so the BFF (which already holds the session) opens the
+    authenticated stream itself and the API token never reaches the
+    browser. Toasts stack bottom-right; errors never auto-dismiss.
+  - **iOS** keeps the connection while foregrounded (SSE framing over
+    `URLSession.bytes`, backoff reconnect, `Last-Event-ID` replay) with
+    banners overlaying the item list. Background delivery would mean APNs
+    — explicitly out of scope, and exactly what this topic would feed.
+- **Module architecture**: the verticle/domain boundary became a MAVEN
+  boundary. `inventory-impl-bus` holds every verticle, the guard, the
+  envelope machinery and the publishers, depending on api +
+  printer-common + vertx-core and nothing else; `dependency:tree` confirms
+  zero storage implementations reachable from the bus layer and zero bus
+  reachable from the domain modules. `Ulid`, `Gtin` and the `UserStore`
+  interface promoted to api; `QrCodes` went to printer-common with zxing
+  rather than dragging a QR library into the contracts module (owner
+  decision). Per-verticle module PAIRS were considered and rejected: ~16
+  modules for the identical compiler guarantee.
+- **Two lessons worth keeping**:
+  1. *Semantics that ride on exception types do not survive a message
+     boundary.* `catalog.create-item` regressed from 409 to 500 because the
+     backend signals "marker already claimed" with an
+     `IllegalStateException` that `CatalogVerticle` used to catch directly;
+     a bus reply carries only a code, so the meaning had to be translated
+     on the storage side. Expect this from any further extraction.
+  2. *An SSE event named `error` collides with `EventSource`'s own
+     connection-error event.* Severity stays the event NAME for
+     programmatic consumers, but the browser proxy re-emits unnamed events
+     with severity inside the JSON.
+- **Known gaps, deliberately left**: `correlationId` is unpopulated
+  (`BusEnvelope` has no request id yet), so printer events are
+  unattributed and route to admins; the storage hop tax is accepted (an
+  in-process hop embedded, a network hop remote) and chatty BFF views may
+  later want batch storage operations.
+- **Remaining gate (manual, needs hardware)**: force a printer refusal —
+  asking for `large` while 12 mm is loaded refuses immediately — and
+  confirm a banner appears within ~2 s while the app is foregrounded. That
+  is the end-to-end proof that a physical failure becomes a human
+  notification.
+
 ## First milestone (Phase 1, implementable detail)
 
 1. **`inventory-api`** — de-codegen and extend:

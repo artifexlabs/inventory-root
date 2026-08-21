@@ -1,2 +1,6 @@
-target/
-.flattened-pom.xml
+.*
+!.gitignore
+.idea/**
+*.iml
+target
+pom.xml.*
