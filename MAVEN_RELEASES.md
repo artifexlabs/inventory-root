@@ -51,6 +51,7 @@ Maven artifacts via maven-release-plugin, with the apps consuming them.*
 | Extraction scope | **Full extraction at once**: inventory-parent, inventory-api, inventory-impl leave the reactor and `${revision}`, get literal release-plugin-managed versions; the four apps keep the Phase 14 tag→images flow and consume released jars | The real change is versioning/release process — the modules already live in separate git repos. Parent must come along: a released artifact cannot have a `${revision}`/SNAPSHOT parent. |
 | Snapshots *(REVERSED 2026-08-21, owner decision)* | **NO snapshot repository.** Everything is aggregated in the inventory-root workspace and built from source (`just libs` locally, the same chain in CI) | With one workspace as the only consumer, a shared SNAPSHOT channel adds credentials and drift for nothing; released artifacts are the only published form. |
 | Releases *(DECIDED 2026-08-21 — the step-5 gate is closed)* | **Maven Central, PUBLIC** — every Java artifact under `io.artifexlabs.inventory`, published via the owner's existing Central account (`infrastructurebuilder`) and its signing keys | The namespace is verified and already deployed-to; the repos are already public; sources-jar publication is accepted (Apache-2.0 headers throughout). |
+| Release execution *(decided 2026-08-21)* | **Local machine only** for every Java artifact — `release:prepare release:perform` is never run by CI | The owner controls the whole release train. Credentials and signing keys stay on one machine, and nothing automated can trigger an irreversible public publish; CI verifies, it does not release. Container images stay automated (overwritable, unlike Central). |
 | Container releases *(added 2026-08-21)* | **Docker Hub, `artifexlabs` user** for released images (auth: an owner-held Docker Hub PAT, deliberately not recorded here) | Public images beside public artifacts; supersedes Phase 14's private-GHCR destination for RELEASES — release.yml migrates at execution. |
 | Namespace *(REVERSED 2026-08-18, owner-accepted)* | **`io.artifexlabs.inventory`** — was `org.lawfulevil.inventory`, renamed wholesale across every repo, package, and document | Collapses the release chain from TWO namespaces to ONE: artifexlabs.io verification is already required for artifex-maven-parent, so inventory now rides the same namespace instead of adding a second (lawfulevil.org) to verify and maintain. Breaking coordinate change, taken while the only consumers are in this workspace. |
 | Upstream parent *(added 2026-08-18)* | **`io.artifexlabs:artifex-maven-parent` sits above inventory-parent, and is RELEASED ENTIRELY INDEPENDENTLY of inventory** | A shared parent for artifexlabs.io projects. Inventory consumes it like any third-party parent — it is NOT part of inventory's release ceremony, and inventory's release train must simply *depend on an already-released version of it*. |
@@ -351,12 +352,16 @@ SUPERPROJECT REACTOR (release model: v-tag -> images; destination moves
   version as one. `${revision}` + flatten-maven-plugin come OUT of the
   extracted poms (release-plugin rewrites literal versions; the apps' reactor
   keeps `${revision}` for the platform tag).
-- **CI**: each extracted repo gets a small release workflow (verify →
-  `release:prepare release:perform`) carrying the Central credentials +
-  signing key. No snapshot-deploy job and no consumer `settings.xml`
-  entries — between releases, everything builds from source in the
-  workspace/CI exactly as today. release.yml's image publishing migrates
-  from GHCR to the Docker Hub `artifexlabs` user at execution.
+- **CI does NOT release** *(decided 2026-08-21)*: there are deliberately no
+  per-repo release workflows. `release:prepare release:perform` is run from
+  the owner's machine for every Java artifact, so no Central credential and
+  no signing key ever leaves it and there is no automated path to an
+  irreversible public publish. CI's job stays what it is today: verify.
+  No snapshot-deploy job and no consumer `settings.xml` entries either —
+  between releases everything builds from source in the workspace and in
+  CI. (Container images are the exception and stay automated: release.yml
+  publishes them to the Docker Hub `artifexlabs` user, because images are
+  overwritable where a Central release is not.)
 - **Verify at execution**: web-api's PgModeApiTest and the impl
   Testcontainers suites must read `db/changelog-master.yaml` from the `-pg`
   jar classpath (Liquibase classpath resolution) once the bind-mount
