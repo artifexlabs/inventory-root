@@ -1,23 +1,23 @@
 # Released-version overlay: swap locally built images for the versioned
-# images in the private GHCR namespace (PLAN.md Phase 14). Usage (from the
-# workspace root):
+# images in the public Docker Hub namespace docker.io/artifexlabs (decided
+# 2026-08-21; formerly private GHCR). Usage (from the workspace root):
 #
 #   INVENTORY_VERSION=1.2.3 docker compose --project-directory . \
 #     -f deploy/docker-compose.yml -f deploy/docker-compose.release.yml up -d
 #
 # `up` uses the named image when it exists locally and pulls it otherwise;
-# it never builds. `docker compose ... pull` first to pre-fetch. Requires
-# `docker login ghcr.io` with a token that can read the private packages.
+# it never builds. `docker compose ... pull` first to pre-fetch. The images
+# are public — no login needed to pull.
 services:
 
   inventory-server:
-    image: ghcr.io/${INVENTORY_GHCR_OWNER:-mykelalvis}/inventory-root/inventory-server:${INVENTORY_VERSION:-latest}
+    image: docker.io/artifexlabs/inventory-server:${INVENTORY_VERSION:-latest}
 
   inventory-web-api:
-    image: ghcr.io/${INVENTORY_GHCR_OWNER:-mykelalvis}/inventory-root/inventory-web-api:${INVENTORY_VERSION:-latest}
+    image: docker.io/artifexlabs/inventory-web-api:${INVENTORY_VERSION:-latest}
 
   inventory-exporter:
-    image: ghcr.io/${INVENTORY_GHCR_OWNER:-mykelalvis}/inventory-root/inventory-exporter:${INVENTORY_VERSION:-latest}
+    image: docker.io/artifexlabs/inventory-exporter:${INVENTORY_VERSION:-latest}
 
   inventory-web-app:
-    image: ghcr.io/${INVENTORY_GHCR_OWNER:-mykelalvis}/inventory-root/inventory-web-app:${INVENTORY_VERSION:-latest}
+    image: docker.io/artifexlabs/inventory-web-app:${INVENTORY_VERSION:-latest}

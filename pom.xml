@@ -9,10 +9,14 @@
   <name>inventory-aggregator</name>
   <description>Untracked local aggregator for the inventory workspace</description>
   <modules>
-    <!-- inventory-api and inventory-impl were extracted 2026-08-19 to peer
-         repos (../inventory-api, ../inventory-impl) released as Maven
-         artifacts — see MAVEN_RELEASES.md. Build them before this reactor
-         (`just libs`); the apps consume them as jars. -->
+    <!-- inventory-api and inventory-impl were extracted 2026-08-19 into
+         lib submodules (inventory-api, inventory-impl-root) released as
+         Maven artifacts — see MAVEN_RELEASES.md. Build them before this
+         reactor (`just libs`); the apps consume them as jars. -->
+    <!-- inventory-bom: pins one coherent, CI-verified version set of those
+         lib artifacts (the anti-skew replacement for a shared ${revision});
+         apps import it once the pins are RELEASED versions (step 3). -->
+    <module>inventory-bom</module>
     <!-- inventory-server: restored as the event-bus worker host — the domain
          services run here behind the bus fabric; inventory-web-api is the
          authenticated HTTP gateway in front of it. -->

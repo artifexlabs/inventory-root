@@ -271,26 +271,30 @@ git push origin v1.2.0                              # triggers release.yml
 git submodule foreach 'git push origin v1.2.0'      # mirror tags
 ```
 
-`release.yml` then: builds the reactor at `-Drevision=1.2.0` (full verify),
-native-images inventory-web-app, and pushes
-`ghcr.io/mykelalvis/inventory-root/<module>:1.2.0` (+`:latest`) for
+`release.yml` then: builds and installs the lib submodules
+(parent → api → impl-root) at their own literal versions, builds the app
+reactor at `-Drevision=1.2.0` (full verify), native-images
+inventory-web-app, and pushes `artifexlabs/<module>:1.2.0` (+`:latest`) to
+PUBLIC Docker Hub (decided 2026-08-21; formerly private GHCR) for
 inventory-server, inventory-web-api, inventory-exporter (JVM images — the
 cluster manager is not yet proven under native) and inventory-web-app
 (native). It ends by drafting a GitHub Release with the run-this-version
-snippet.
+snippet. Images may be built from unreleased Maven artifacts — images are
+removable/overwritable; Maven Central releases are not, and follow their
+own ceremony (MAVEN_RELEASES.md).
 
-After the FIRST release: verify all four packages show **Private** in the
-GHCR UI (user-account packages default private — check, don't assume).
+After the FIRST release: verify the four `artifexlabs/*` repos on Docker
+Hub carry the new tag and are public.
 
-Running a released version (any machine with `docker login ghcr.io`):
+Running a released version (any machine — the images are public):
 
 ```bash
 INVENTORY_VERSION=1.2.0 docker compose --project-directory . -f deploy/docker-compose.yml -f deploy/docker-compose.release.yml up -d
 ```
 
 Rolling back a bad release: deploy the previous version with the overlay
-(images are immutable — nothing needs rebuilding); delete the bad GHCR
-package versions and the draft release; delete the tags
+(images are immutable — nothing needs rebuilding); delete the bad Docker
+Hub tags and the draft release; delete the git tags
 (`git tag -d v1.2.0` + `git push origin :refs/tags/v1.2.0`, same in
 submodules) only if the version number is to be reused, which it normally
 should not be.

@@ -1,6 +1,9 @@
 # Phase 14: tag-driven formal releases. Pushing vX.Y.Z on the superproject
 # builds the whole reactor at that version and publishes container images to
-# the private GHCR namespace ghcr.io/<owner>/inventory-root/<module>.
+# the PUBLIC Docker Hub namespace docker.io/artifexlabs/<module> (decided
+# 2026-08-21, superseding the private-GHCR destination). Images may be built
+# from unreleased Maven artifacts — images can be removed or overwritten;
+# Maven Central releases cannot, and happen separately (MAVEN_RELEASES.md).
 #
 # Images match what deploy/docker-compose.yml actually deploys: JVM images for the
 # three bus members (the vertx-infinispan cluster manager is not yet proven
@@ -25,7 +28,6 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write   # draft release
-      packages: write   # GHCR push
     steps:
       - name: Rewrite SSH GitHub URLs to HTTPS
         run: git config --global url."https://github.com/".insteadOf "git@github.com:"
@@ -57,18 +59,26 @@ jobs:
           mvn -version
       - name: Derive version from tag
         run: echo "VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
+      # The lib submodules are NOT reactor modules (MAVEN_RELEASES.md): build
+      # and install them at their own literal versions, in dependency order;
+      # -Drevision versions only the four apps.
+      - name: Build and install the libs (parent -> api -> impl)
+        run: |
+          for d in inventory-parent inventory-api inventory-impl-root; do
+            mvn -B -ntp -f "$d/pom.xml" clean install
+          done
       - name: Build and test the reactor at the release version
         run: mvn -B -ntp verify -Drevision="$VERSION"
       - name: Native-image inventory-web-app
         run: |
           mvn -B -ntp -pl inventory-web-app -am package -Drevision="$VERSION" \
             -Dmaven.test.skip=true -Dnative -Dquarkus.native.container-build=true
-      - name: Log in to GHCR
-        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+      - name: Log in to Docker Hub
+        run: echo "${{ secrets.DOCKERHUB_TOKEN }}" | docker login -u artifexlabs --password-stdin
       - name: Build and push images
         run: |
           set -euo pipefail
-          NS="ghcr.io/${{ github.repository }}"   # <owner>/inventory-root
+          NS="artifexlabs"
           SRC="https://github.com/${{ github.repository }}"
           build_push() {  # module dockerfile
             local module="$1" dockerfile="$2"
@@ -90,16 +100,16 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           cat > /tmp/release-notes.md <<EOF
-          Platform release ${VERSION}. Images (private GHCR):
+          Platform release ${VERSION}. Images (public Docker Hub):
 
           \`\`\`
-          ghcr.io/${{ github.repository }}/inventory-server:${VERSION}
-          ghcr.io/${{ github.repository }}/inventory-web-api:${VERSION}
-          ghcr.io/${{ github.repository }}/inventory-exporter:${VERSION}
-          ghcr.io/${{ github.repository }}/inventory-web-app:${VERSION}
+          artifexlabs/inventory-server:${VERSION}
+          artifexlabs/inventory-web-api:${VERSION}
+          artifexlabs/inventory-exporter:${VERSION}
+          artifexlabs/inventory-web-app:${VERSION}
           \`\`\`
 
-          Run this version (after \`docker login ghcr.io\`):
+          Run this version:
 
           \`\`\`
           INVENTORY_VERSION=${VERSION} docker compose --project-directory . -f deploy/docker-compose.yml -f deploy/docker-compose.release.yml up -d

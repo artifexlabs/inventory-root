@@ -178,6 +178,37 @@ Maven artifacts via maven-release-plugin, with the apps consuming them.*
   and Helm copy-rule comments follow the changelogs to
   `inventory-impl-root/inventory-impl-pg/src/main/resources`.
 
+## What already happened (2026-08-21 — step 2 config + BOM, NO releases)
+
+Owner directive: all remaining Phase 19 CONFIGURATION executed, but no
+public release happens until fully prepared (releases are irreversible;
+Docker Hub images are not, so images built from unreleased artifacts are
+acceptable and overwritable).
+
+- **Central publishing wired** in inventory-parent:
+  `central-publishing-maven-plugin` 0.11.0 (extensions=true,
+  `publishingServerId=central`, **autoPublish=false** — a deploy only
+  STAGES a bundle in the Central Portal; publication stays a manual human
+  act). A `release` profile binds `maven-gpg-plugin` sign (version managed
+  by the parent chain; the owner's existing keys via local gpg-agent).
+- **maven-release-plugin configured** via pluginManagement:
+  `tagNameFormat=v@{project.version}`, `releaseProfiles=release`,
+  `autoVersionSubmodules=true` (the impl-root train), `signTag=true`.
+- **inventory-bom EXISTS** as a reactor module of inventory-root (owner
+  decision: the BOM code belongs in the inventory-root repo): literal
+  `0.1.0-SNAPSHOT`, pinning api/impl/impl-pg/impl-changeset at their
+  literal versions. The apps do NOT import it yet — they stay on the
+  parent's dependencyManagement until step 3 makes the pins RELEASED
+  versions.
+- **release.yml migrated to Docker Hub**: images push to the public
+  `artifexlabs` namespace (login via a repo secret; the credential itself
+  is held by the owner and not recorded anywhere in the codebase). The
+  workflow also gained the lib install chain (parent → api → impl-root)
+  it was missing since the extraction — a v-tag before this fix would
+  have failed. deploy/docker-compose.release.yml, the Justfile release
+  echoes, and RUNBOOK's release narrative follow. The GHCR devcontainer
+  tooling image is unaffected (not a release artifact).
+
 ## Blockers this created
 
 1. **CI: FULLY RESOLVED 2026-08-19** (run 32252083378 green end to end:
@@ -271,11 +302,14 @@ SUPERPROJECT REACTOR (release model: v-tag -> images; destination moves
 
 ## Mechanics
 
-- **distributionManagement** (in inventory-parent): Central ONLY — no
-  snapshotRepository (decision 2026-08-21). The
-  `central-publishing-maven-plugin` + the `infrastructurebuilder` account's
-  existing GPG signing keys; `io.artifexlabs` namespace verification is
-  already done (artifex-maven-parent 2 is on Central).
+- **Central publishing** *(WIRED 2026-08-21)*: no `distributionManagement`
+  repository element at all — `central-publishing-maven-plugin` (as a
+  deploy-replacing extension, `publishingServerId=central`,
+  autoPublish=false) is the whole mechanism, with the
+  `infrastructurebuilder` account's existing GPG signing keys in the
+  `release` profile; `io.artifexlabs` namespace verification is already
+  done (artifex-maven-parent 2 is on Central). No snapshotRepository —
+  there are no snapshots (decision 2026-08-21).
 - **maven-release-plugin** per repo: `releaseProfiles=release` (rides
   ibparent's sources/javadoc profile), `tagNameFormat=v@{project.version}`,
   `autoVersionSubmodules=true` in inventory-impl-root so both modules
@@ -344,16 +378,17 @@ SUPERPROJECT REACTOR (release model: v-tag -> images; destination moves
    owner-created `inventory-impl-root` repo: aggregator + core + `-pg`,
    consumers rewired, changelog-in-jar real, impl reactor + app reactor
    green (see "What already happened (2026-08-19, later — step 1)").
-2. **Release wiring.** *(MOSTLY DONE — parent 2026-08-18; api/impl
-   2026-08-19: all three are out of the reactor in their own artifexlabs
-   repos with literal versions, and the aggregator + Justfile now treat
-   them as prebuilt libs.)* Remaining: artifact distributionManagement
-   (today all three carry only a site entry — becomes Central-only per the
-   2026-08-21 decision) + release-plugin config. No SNAPSHOT deploys (the
-   channel was dropped); ci.yml keeps building libs from source until step
-   3's releases let the apps pin Central coordinates.
-3. **First releases + inventory-bom.** `release:prepare` dry-run, then real
-   releases of parent → api → impl; BOM cut; apps pinned to it.
+2. **Release wiring.** ***DONE 2026-08-21*** (config only, no releases):
+   extraction 2026-08-18/19; central-publishing plugin + gpg release
+   profile + release-plugin conventions in inventory-parent (see "What
+   already happened 2026-08-21"). ci.yml keeps building libs from source
+   until step 3's releases let the apps pin Central coordinates.
+3. **First releases + inventory-bom.** *(BOM half DONE 2026-08-21 — it
+   exists as an inventory-root reactor module pinning the 0.1.0-SNAPSHOT
+   set; apps import it when the pins are releases.)* Remaining, DEFERRED by
+   owner directive until fully prepared: `release:prepare` dry-run, real
+   releases of parent → api → impl-root, BOM re-pinned to them and
+   deployed, apps switched from parent-dM versions to the BOM import.
 4. **Deploy-side payoff.** Migrate consumption switches to the versioned
    changelog (an `inventory-migrate` image or changelog-from-jar extraction)
    across compose/Nomad/Helm; the Helm copy rule and Nomad checkout mount
