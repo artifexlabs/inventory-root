@@ -412,12 +412,17 @@ SUPERPROJECT REACTOR (release model: v-tag -> images; destination moves
    profile + release-plugin conventions in inventory-parent (see "What
    already happened 2026-08-21"). ci.yml keeps building libs from source
    until step 3's releases let the apps pin Central coordinates.
-3. **First releases + inventory-bom.** *(BOM half DONE 2026-08-21 — it
-   exists as an inventory-root reactor module pinning the 0.1.0-SNAPSHOT
-   set; apps import it when the pins are releases.)* Remaining, DEFERRED by
-   owner directive until fully prepared: `release:prepare` dry-run, real
-   releases of parent → api → impl-root, BOM re-pinned to them and
-   deployed, apps switched from parent-dM versions to the BOM import.
+3. **First releases + inventory-bom.** *(IN PROGRESS 2026-08-21:
+   **`inventory-parent:1` IS RELEASED to Maven Central** — the first real
+   inventory release, after two instructive failures (see the
+   release-attempt section). All seven parent pins bumped to the released
+   `1`; inventory-parent left the Justfile lib chain — it resolves from
+   Central now, exactly like artifex-maven-parent. The apps already import
+   the BOM (that landed with the Central-validation restructure).)*
+   Remaining: release api `0.1.0` → bump impl-root's
+   `inventory.api.version` → release the impl-root train `0.1.0` → re-pin
+   the BOM's properties to the releases and deploy the BOM → bump the
+   apps' BOM import to the released BOM.
 4. **Deploy-side payoff.** ***DONE 2026-08-21***: the `inventory-migrate`
    image (Dockerfile in inventory-impl-changeset: Liquibase 4.29 + the
    changeset JAR on the classpath — true changelog-from-jar, no

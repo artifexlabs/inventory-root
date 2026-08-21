@@ -38,11 +38,12 @@ ios_simulator := env('INVENTORY_IOS_SIMULATOR', 'iPhone 17')
 compose := "docker compose --project-directory . -f deploy/docker-compose.yml"
 
 # The extracted library repos (MAVEN_RELEASES.md), built IN THIS ORDER before
-# the reactor: parent -> api -> impl. They are workspace submodules again
-# (artifexlabs-org repos) but deliberately NOT reactor modules — they install
-# to ~/.m2 and the apps consume them as jars. artifex-maven-parent is NOT
-# here on purpose — it releases on its own clock and resolves from Central.
-lib_dirs := "inventory-parent inventory-api inventory-impl-root"
+# the reactor: api -> impl. They are workspace submodules (artifexlabs-org
+# repos) but deliberately NOT reactor modules — they install to ~/.m2 and the
+# apps consume them as jars. inventory-parent is NOT here anymore: released
+# as `1` (2026-08-21), it resolves from Central like artifex-maven-parent —
+# re-add it temporarily only while developing the NEXT parent release.
+lib_dirs := "inventory-api inventory-impl-root"
 
 # EVERY recipe that runs Maven tests must go through this.
 #
