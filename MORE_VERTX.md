@@ -217,6 +217,52 @@ inventory-impl-root
   bus-level integration (including the bus parity layer) in
   inventory-impl-bus.
 
+## Execution log
+
+- **Step 1 DONE 2026-08-21** (feature `more-vertx-status-fabric`): the
+  StatusEvent fabric exists and every refusal path emits.
+  - api: `StatusEvent` (the dual-form record — the builder demands `code`
+    AND `message` at one call site so the faces cannot drift),
+    `StatusEvents` (topic + wire, mirroring `InventoryEvents`),
+    `StatusPublisher` (fire-and-forget, NOOP default).
+  - Identity is stamped at PUBLICATION, not construction, so ids/timestamps
+    agree with delivery order; `VertxStatusPublisher` does the stamping and
+    swallows failures by contract.
+  - Emitters wired: Brother (tape-mismatch, unknown-format,
+    no-scannable-qr, print-failed, batch-refused, feed-failed), Zebra
+    (unknown-format, print-failed), `BusGuard` (bad-fabric-token,
+    forbidden). Every one of these was previously a `log.warn` that died in
+    a file.
+  - `StatusLogVerticle` deploys with the workers so the topic is never
+    write-only.
+  - Tests: 6 api (both-faces enforcement, publication stamping, wire
+    round-trip per severity), 5 Brother emission tests asserting exactly
+    one event with both faces AND the structured params.
+  - **Known gap**: `correlationId` is unpopulated — `BusEnvelope` has no
+    request id yet. Printer events are likewise unattributed (the printer
+    does not know who asked), which is precisely what step 4's packets fix.
+    Until then, unattributed events are admin-visible (see step 2).
+- **Step 2 GATEWAY DONE 2026-08-21**, web-app surfacing pending:
+  - `StatusStreamBroadcaster` (@ApplicationScoped) subscribes to the topic
+    ONCE at startup and fans out per connection; `EventsResource` exposes
+    `GET /api/v1/events/stream` (SSE), already covered by the blanket
+    bearer-token filter. SSE event NAME = severity, data = the event JSON.
+  - Scoping (a security boundary, so tested without a server): a user sees
+    events whose `actor` is them; admins additionally see unattributed
+    system faults, and `?all=true` gives admins the firehose — the flag is
+    IGNORED for non-admins. Replay is filtered by the identical rules.
+  - Reconnect: `Last-Event-ID` replays the gap from a bounded ring (100
+    events / 15 min); an unknown cursor replays NOTHING rather than
+    implying completeness it cannot promise.
+  - Tests: 8, covering crossed-actor privacy, admin-only firehose,
+    unattributed routing, gap replay, replay leak-proofing, dead-client
+    eviction, ring bounding.
+  - **Browser-token note**: `EventSource` cannot set an Authorization
+    header, so the browser must NOT connect to this endpoint directly. The
+    web-app (a BFF holding the session server-side) proxies the stream to
+    the browser — which also keeps tokens out of URLs. That proxy plus the
+    toast UI is the remaining half of step 2.
+
 ## Staged steps (each a milestone-sized chunk)
 
 1. **StatusEvent fabric** — the record + emitting helper in api/impl, the
