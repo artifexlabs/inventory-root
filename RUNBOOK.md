@@ -147,7 +147,7 @@ docker compose --project-directory . -f deploy/docker-compose.yml run --rm --bui
 Vendor resolved 2026-08-08: Brother PT-P750W (Wi-Fi, raw TCP 9100, Brother raster
 protocol; TZe tape ≤ 24 mm at 180 dpi). **Steps 1–3 PASSED 2026-08-09**: printer on
 the LAN at 10.0.1.130 (in the workspace `.env` — update there if DHCP moves it),
-`just print-label` printed a physical 414-line label and returned 204 with the
+`just print-label` printed a physical 414-line label and returned 204 (now 202 — MORE_VERTX) with the
 `label.print` audit row. The compose stack forwards `INVENTORY_PRINTER*` from `.env`
 to the server (defaults keep the `log` printer).
 

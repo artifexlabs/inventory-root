@@ -53,7 +53,7 @@ lib_dirs := "inventory-api inventory-impl-root"
 #     exchange secret configures it (404 becomes 401).
 #   * QrAndLabelTest expects the default LOG printer, including that `feed`
 #     extends tape; .env points INVENTORY_PRINTER at real hardware, and a
-#     ZebraPrinter correctly refuses to feed die-cut media (204 becomes 503).
+#     ZebraPrinter correctly refuses to feed die-cut media (202 becomes 503).
 # NOTE -DskipTests is NOT an escape: ibparent-root hard-pins
 # <skipTests>false</skipTests>, so tests run anyway — only
 # -Dmaven.test.skip=true genuinely skips them.
@@ -228,7 +228,7 @@ destroy:
 
 # --- smoke (the standing check) ----------------------------------------------
 
-# Login -> CRUD -> qr.png is a real PNG -> print-label 204 -> BFF view.
+# Login -> CRUD -> qr.png is a real PNG -> print-label 202 -> BFF view.
 [group('smoke')]
 smoke:
     #!/usr/bin/env bash
@@ -250,8 +250,8 @@ smoke:
     file /tmp/inventory-smoke-qr.png | grep -q 'PNG image data' || { echo "FAIL: qr.png is not a PNG"; exit 1; }
     echo "ok: qr.png is a real PNG (/tmp/inventory-smoke-qr.png; decode gate: it must encode <qr-base-url>/i/$ID)"
     CODE=$(curl -s -o /dev/null -w '%{http_code}' -X POST -H "Authorization: Bearer $TOKEN" {{ server_url }}/api/v1/items/$ID/print-label)
-    [ "$CODE" = "204" ] || { echo "FAIL: print-label returned $CODE"; exit 1; }
-    echo "ok: print-label 204 (LabelPrinter dispatched + audited)"
+    [ "$CODE" = "202" ] || { echo "FAIL: print-label returned $CODE"; exit 1; }
+    echo "ok: print-label 202 accepted (queued to the printer verticle + audited)"
     curl -sf -H "Authorization: Bearer $TOKEN" "{{ webapi_url }}/api/v1/views/items?query=smoke" | grep -q smoke-item \
       || { echo "FAIL: BFF view missing smoke-item"; exit 1; }
     echo "ok: BFF view answers through web-api"
@@ -276,9 +276,10 @@ smoke-fake-printer:
       | sed -E 's/.*"id":"([^"]+)".*/\1/')
     CODE=$(curl -s -o /dev/null -w '%{http_code}' -X POST -H "Authorization: Bearer $TOKEN" \
       {{ server_url }}/api/v1/items/$ID/print-label)
-    [ "$CODE" = "204" ] || { echo "FAIL: print-label returned $CODE"; exit 1; }
-    echo "ok: print-label 204 against the fake printer"
-    sleep 2
+    [ "$CODE" = "202" ] || { echo "FAIL: print-label returned $CODE"; exit 1; }
+    echo "ok: print-label 202 accepted against the fake printer"
+    # acceptance is not completion: the raster lands a moment later
+    sleep 4
     JOB=$({{ compose }} --profile fake-printer exec -T fake-printer sh -c 'ls -t /jobs 2>/dev/null | head -1')
     [ -n "$JOB" ] || { echo "FAIL: no job captured by the fake printer"; exit 1; }
     {{ compose }} --profile fake-printer cp fake-printer:/jobs/$JOB /tmp/inventory-fake-printer-job.bin

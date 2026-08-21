@@ -290,6 +290,35 @@ inventory-impl-root
     landed BEFORE the pending `inventory-api` 0.1.0 release so the first
     published surface is the one we mean to keep.
 
+- **Step 4 DONE 2026-08-21** (feature `more-vertx-printer-verticles`): the
+  printer is reached over the bus, and replies mean ACCEPTED.
+  - `printer-common` gains `PrintPackets` (addresses + wire form: a
+    self-contained packet carrying a serialized item, scanUrl, format and
+    optional qrPng; `labelByReference` is the documented escape hatch) and
+    `LabelPrinterVerticle`, which consumes `printer.print`,
+    `printer.print-batch`, `printer.feed`. It is vendor-AGNOSTIC — the
+    vendor already lives in the injected `LabelPrinter`, so no per-vendor
+    verticle class was needed (a small, deliberate simplification of the
+    accepted text; the vendor modules remain the vendor seam).
+  - `LabelsVerticle` no longer holds a printer: it resolves the item,
+    builds a packet, sends it, audits the ACCEPTANCE, and returns.
+    `BusWorkers` deploys the printer verticle on worker threads (composing
+    and rasterizing is CPU work) with the item lookup wired for the
+    by-reference path.
+  - **HTTP contract changed, deliberately**: `print-label`, `print-batch`
+    and `labels/feed` answer **202 Accepted** with `{"accepted":true}`
+    instead of 204. TCP 9100 is unidirectional — "printed" was never
+    knowable — so the reply now says exactly what is true, and an HTTP
+    request no longer waits on hardware. The outcome follows as a
+    StatusEvent (`printer.printed`, or the driver's specific refusal).
+  - Consumers updated: web-api tests (including the Brother raster test,
+    which still proves real bytes arrive through the packet path), the
+    `just smoke` and `just smoke-fake-printer` recipes (the fake-printer
+    check now waits, since acceptance precedes the raster), and the **iOS
+    app** — `printLabel` documents the 202 contract and the button now
+    reads "Sent to printer" rather than "Label printed", because claiming
+    the latter would be a lie.
+
 ## Staged steps (each a milestone-sized chunk)
 
 1. **StatusEvent fabric** — the record + emitting helper in api/impl, the
