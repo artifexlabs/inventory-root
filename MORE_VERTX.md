@@ -319,6 +319,39 @@ inventory-impl-root
     reads "Sent to printer" rather than "Label printed", because claiming
     the latter would be a lie.
 
+- **Step 5 DONE 2026-08-21** (feature `more-vertx-storage-verticle`): all
+  data IO is behind one door.
+  - `StorageVerticle` owns every backend (`InventorySystem`, `AssetStore`,
+    `UserStore`, `TokenService`, `RegionSystem`, `AuditReader`,
+    `AuditSink`) and serves them at the internal, deliberately UNGUARDED
+    `storage` address — admission already happened at the public verticle
+    that forwarded the envelope.
+  - The 47 handlers split by shape: six pure-IO services plus auth moved
+    wholesale into registrars (`ItemsStorage`, `AssetsStorage`,
+    `RegionsStorage`, `AuditStorage`, `UsersStorage`, `TokensStorage`,
+    `AuthStorage`), and their public verticles became `forward(...)` —
+    guard and route, nothing else. Labels and Catalog stayed orchestrators
+    and now reach storage by message (`ITEMS_GET`, plus two internal
+    operations: `storage.audit.record` and
+    `storage.assets.create-from-upc`).
+  - **The atomicity rule held**: every registered operation is one whole
+    unit of work. The catalog's item+image creation stayed a SINGLE storage
+    message precisely because composing it from two would tear the
+    transaction the Pg backend guarantees in-process.
+  - **What the refactor actually broke, and the lesson**: `catalog.create-item`
+    returned 500 instead of 409. The backend signals "marker already
+    claimed" by throwing `IllegalStateException`, which CatalogVerticle used
+    to catch directly — but a bus reply carries only a code, so that meaning
+    had to be translated on the STORAGE side. Semantics that rode on
+    exception types across an in-process call must be encoded explicitly
+    once a message boundary sits between them; this is the failure mode to
+    expect from any further extraction.
+  - Pinned by `StorageIsolationTest` (20 assertions): no public verticle
+    may take or hold a backend type, storage is the one that does, and the
+    internal operations are namespaced outside the public `BusActions`
+    vocabulary so no external caller can name them. Verified structurally:
+    all nine public verticles now reference zero backend types.
+
 ## Staged steps (each a milestone-sized chunk)
 
 1. **StatusEvent fabric** — the record + emitting helper in api/impl, the
