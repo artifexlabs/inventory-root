@@ -104,6 +104,9 @@ libs:
       echo "-> delegating to Maven: mvn -B clean install in $d (with tests)"
       {{ test_env }} mvn -B -ntp -f "$d/pom.xml" clean install
     done
+    # the BOM too: the apps IMPORT it, so -pl/isolation/dev builds must be
+    # able to resolve it from ~/.m2 (reactor builds see the module directly)
+    mvn -B -ntp -pl inventory-bom clean install
     just _invalidate-quarkus-model-cache
 
 # Quarkus serializes each app's test ApplicationModel to
@@ -169,6 +172,7 @@ _sync-libs:
       echo "-> delegating to Maven: mvn -B clean install in $d (tests skipped)"
       {{ test_env }} mvn -q -B -ntp -f "$d/pom.xml" clean install -Dmaven.test.skip=true
     done
+    mvn -q -B -ntp -pl inventory-bom clean install
     just _invalidate-quarkus-model-cache
 
 # inventory-web-api in live-coding mode on :8081 (embedded bus workers on the

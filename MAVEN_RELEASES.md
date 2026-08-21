@@ -209,6 +209,35 @@ acceptable and overwritable).
   echoes, and RUNBOOK's release narrative follow. The GHCR devcontainer
   tooling image is unaffected (not a release artifact).
 
+## What already happened (2026-08-21, later — the first release attempt)
+
+The owner attempted the real `inventory-parent` release. Two failures, two
+permanent fixes:
+
+1. **"No pinentry"** during GPG signing — a stale gpg-agent that couldn't
+   launch its (correctly installed) pinentry-mac; fixed by restarting the
+   agent (`gpgconf --kill gpg-agent`). Passphrase saved to the keychain
+   prevents recurrence.
+2. **Central validation REJECTED the staged bundle**: released poms may not
+   carry SNAPSHOT versions in dependencyManagement, and inventory-parent's
+   dM pinned the four inventory artifacts at `${inventory.version}` =
+   0.1.0-SNAPSHOT — a structural chicken-and-egg, since the parent releases
+   BEFORE the libs it referenced. **Restructure (the BOM's real arrival)**:
+   - inventory-parent manages THIRD-PARTY versions only (all
+     release-versioned → validates clean forever); `inventory.version` and
+     the four inventory dM entries are gone.
+   - The four apps now IMPORT `inventory-bom` (literal version) — the BOM
+     is the inventory-family version authority, as designed.
+   - `inventory-impl-root` pins its one cross-repo dependency itself
+     (`inventory.api.version` property) — bumped to api's released version
+     as part of the train's release ceremony.
+   - Justfile `libs`/`_sync-libs` also install the BOM so -pl/dev builds
+     resolve the import from ~/.m2.
+   - The failed ceremony was unwound (owner ran `release:rollback`; tag
+     was local-only, nothing pushed); re-release runs from the clean pom.
+   - Per-release pin points now: impl-root's `inventory.api.version`, the
+     BOM's version properties, and each app's one-line BOM import version.
+
 ## Blockers this created
 
 1. **CI: FULLY RESOLVED 2026-08-19** (run 32252083378 green end to end:
