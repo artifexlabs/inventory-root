@@ -49,8 +49,9 @@ Maven artifacts via maven-release-plugin, with the apps consuming them.*
 |---|---|---|
 | Impl module shape | **Multi-module build, ONE version**: `inventory-impl` (core) + `inventory-impl-pg` (Pg code + changesets), released atomically | Artifact separation without version separation. The changelog↔SQL cohesion is real, but the memory/Pg twins and their parity tests must stay in one test run (the refusal-precedence divergence class). Repo separation later is possible but doubted. |
 | Extraction scope | **Full extraction at once**: inventory-parent, inventory-api, inventory-impl leave the reactor and `${revision}`, get literal release-plugin-managed versions; the four apps keep the Phase 14 tag→images flow and consume released jars | The real change is versioning/release process — the modules already live in separate git repos. Parent must come along: a released artifact cannot have a `${revision}`/SNAPSHOT parent. |
-| Snapshots | **GitHub Packages** (private) | Same credential family as GHCR; internal-only consumers. |
-| Releases | **STAGED — decide before the first release.** Central (permanently public; sources jars are mandatory, so every release is de-facto open-sourced under the existing Apache-2.0 headers, even with private repos) vs GitHub Packages (private; every consumer authenticates) | The trade-off is publicness, not mechanics — `distributionManagement` carries both targets either way. |
+| Snapshots *(REVERSED 2026-08-21, owner decision)* | **NO snapshot repository.** Everything is aggregated in the inventory-root workspace and built from source (`just libs` locally, the same chain in CI) | With one workspace as the only consumer, a shared SNAPSHOT channel adds credentials and drift for nothing; released artifacts are the only published form. |
+| Releases *(DECIDED 2026-08-21 — the step-5 gate is closed)* | **Maven Central, PUBLIC** — every Java artifact under `io.artifexlabs.inventory`, published via the owner's existing Central account (`infrastructurebuilder`) and its signing keys | The namespace is verified and already deployed-to; the repos are already public; sources-jar publication is accepted (Apache-2.0 headers throughout). |
+| Container releases *(added 2026-08-21)* | **Docker Hub, `artifexlabs` user** for released images (auth: an owner-held Docker Hub PAT, deliberately not recorded here) | Public images beside public artifacts; supersedes Phase 14's private-GHCR destination for RELEASES — release.yml migrates at execution. |
 | Namespace *(REVERSED 2026-08-18, owner-accepted)* | **`io.artifexlabs.inventory`** — was `org.lawfulevil.inventory`, renamed wholesale across every repo, package, and document | Collapses the release chain from TWO namespaces to ONE: artifexlabs.io verification is already required for artifex-maven-parent, so inventory now rides the same namespace instead of adding a second (lawfulevil.org) to verify and maintain. Breaking coordinate change, taken while the only consumers are in this workspace. |
 | Upstream parent *(added 2026-08-18)* | **`io.artifexlabs:artifex-maven-parent` sits above inventory-parent, and is RELEASED ENTIRELY INDEPENDENTLY of inventory** | A shared parent for artifexlabs.io projects. Inventory consumes it like any third-party parent — it is NOT part of inventory's release ceremony, and inventory's release train must simply *depend on an already-released version of it*. |
 
@@ -187,9 +188,9 @@ Maven artifacts via maven-release-plugin, with the apps consuming them.*
    The token risk retired itself: the owner made the three artifexlabs
    repos PUBLIC ("that's where they'll be eventually anyway" — consistent
    with the Central destination, which publishes source regardless), so
-   the default token clones them. Publishing to GitHub Packages is no
-   longer a CI prerequisite; it returns to being step 2's SNAPSHOT-channel
-   work.
+   the default token clones them. *(2026-08-21: the SNAPSHOT channel was
+   dropped entirely — build-from-source is the permanent model until
+   releases exist, so no publishing prerequisite remains at all.)*
 2. **artifex-maven-parent pin: FULLY RESOLVED 2026-08-19** —
    `io.artifexlabs.parents:artifex-maven-parent:2` is released ON MAVEN
    CENTRAL and inventory-parent pins it. (Standing rule unchanged: artifex
@@ -248,9 +249,11 @@ RELEASED ARTIFACTS (maven-release-plugin, literal versions)
     inventory-impl-pg         Pg* classes; depends on core + changeset
   inventory-bom             pins one coherent api+impl version set
 
-SUPERPROJECT REACTOR (unchanged release model: v-tag -> GHCR images)
+SUPERPROJECT REACTOR (release model: v-tag -> images; destination moves
+  GHCR -> Docker Hub `artifexlabs` for releases, decided 2026-08-21)
   inventory-server, inventory-web-api, inventory-exporter, inventory-web-app
-  — import inventory-bom; depend on released (or GH-Packages SNAPSHOT) jars
+  — import inventory-bom; depend on released jars (workspace source builds
+  until the first release)
 ```
 
 - Server/web-api/exporter depend on `inventory-impl-pg` (transitively core);
@@ -268,12 +271,11 @@ SUPERPROJECT REACTOR (unchanged release model: v-tag -> GHCR images)
 
 ## Mechanics
 
-- **distributionManagement** (in inventory-parent):
-  `<snapshotRepository>` → `https://maven.pkg.github.com/mykelalvis/inventory-root`
-  (one shared Packages repo — GH Packages accepts any groupId under it);
-  `<repository>` → the staged decision. When Central: the
-  `central-publishing-maven-plugin` + GPG signing key, and one-time
-  namespace verification for io.artifexlabs.
+- **distributionManagement** (in inventory-parent): Central ONLY — no
+  snapshotRepository (decision 2026-08-21). The
+  `central-publishing-maven-plugin` + the `infrastructurebuilder` account's
+  existing GPG signing keys; `io.artifexlabs` namespace verification is
+  already done (artifex-maven-parent 2 is on Central).
 - **maven-release-plugin** per repo: `releaseProfiles=release` (rides
   ibparent's sources/javadoc profile), `tagNameFormat=v@{project.version}`,
   `autoVersionSubmodules=true` in inventory-impl-root so both modules
@@ -281,18 +283,19 @@ SUPERPROJECT REACTOR (unchanged release model: v-tag -> GHCR images)
   extracted poms (release-plugin rewrites literal versions; the apps' reactor
   keeps `${revision}` for the platform tag).
 - **CI**: each extracted repo gets a small release workflow (verify →
-  `release:prepare release:perform`) with a GH-Packages token, plus a
-  SNAPSHOT-deploy-on-develop-push job. Consumer auth: a `settings.xml`
-  server entry for GH Packages in ci.yml, the devcontainer, release.yml,
-  and developer docs.
+  `release:prepare release:perform`) carrying the Central credentials +
+  signing key. No snapshot-deploy job and no consumer `settings.xml`
+  entries — between releases, everything builds from source in the
+  workspace/CI exactly as today. release.yml's image publishing migrates
+  from GHCR to the Docker Hub `artifexlabs` user at execution.
 - **Verify at execution**: web-api's PgModeApiTest and the impl
   Testcontainers suites must read `db/changelog-master.yaml` from the `-pg`
   jar classpath (Liquibase classpath resolution) once the bind-mount
   assumption is gone from tests.
-- **Dev inner loop**: the Justfile's `_sync-libs` evolves — day-to-day
-  cross-repo dev = local `mvn install` of SNAPSHOTs exactly as today, with
-  GH Packages as the shared SNAPSHOT channel when a change must be visible
-  to CI or another machine before release.
+- **Dev inner loop**: unchanged and now PERMANENT — local `mvn install`
+  of SNAPSHOTs via `just libs`; another machine gets them by building the
+  same workspace from source. Visibility beyond the workspace happens only
+  through real releases.
 - **Build recipes must ALWAYS clean, because the IDE poisons target/**
   (added 2026-08-19 after a long false trail — this was the real "verify
   flake"): VS Code's Eclipse-JDT compiler writes `.class` files into
@@ -324,8 +327,9 @@ SUPERPROJECT REACTOR (unchanged release model: v-tag -> GHCR images)
   atomic impl release train are the mitigations.
 - Central releases are **irreversible and public** (with sources). The
   staged destination decision is the gate.
-- New infrastructure to keep healthy: GH Packages tokens in four+ places,
-  optional GPG key, per-repo release workflows.
+- New infrastructure to keep healthy: Central publishing credentials +
+  GPG signing keys in the release workflows, a Docker Hub credential for
+  image publishing, per-repo release workflows.
 - `mvn clean verify` house rule matters MORE, not less: stale-compile masks
   across released-artifact boundaries surface only at consumer bump time.
 
@@ -344,25 +348,28 @@ SUPERPROJECT REACTOR (unchanged release model: v-tag -> GHCR images)
    2026-08-19: all three are out of the reactor in their own artifexlabs
    repos with literal versions, and the aggregator + Justfile now treat
    them as prebuilt libs.)* Remaining: artifact distributionManagement
-   (today all three carry only a site entry) + release-plugin config; first
-   SNAPSHOT deploys to GH Packages; ci.yml shrinks to the apps consuming
-   coordinates instead of reactor paths.
+   (today all three carry only a site entry — becomes Central-only per the
+   2026-08-21 decision) + release-plugin config. No SNAPSHOT deploys (the
+   channel was dropped); ci.yml keeps building libs from source until step
+   3's releases let the apps pin Central coordinates.
 3. **First releases + inventory-bom.** `release:prepare` dry-run, then real
    releases of parent → api → impl; BOM cut; apps pinned to it.
 4. **Deploy-side payoff.** Migrate consumption switches to the versioned
    changelog (an `inventory-migrate` image or changelog-from-jar extraction)
    across compose/Nomad/Helm; the Helm copy rule and Nomad checkout mount
    retire.
-5. **Gate: the release-destination decision** (Central-public vs
-   GH-Packages-private) — required before step 3's first non-SNAPSHOT
-   release, with the publicness trade-off above.
+5. ~~Gate: the release-destination decision.~~ **RESOLVED 2026-08-21 by
+   owner decision: Maven Central, public, `io.artifexlabs.inventory`, via
+   the `infrastructurebuilder` account and its signing keys; release
+   images to Docker Hub `artifexlabs`.**
 
 ## Verification (for the eventual execution)
 
 - Step 1: full reactor `mvn clean verify` + CI green; web-app native image
   builds without pg-client metadata; changelog present inside the `-pg` jar.
-- Step 2: a scratch SNAPSHOT deployed to GH Packages and consumed by a
-  clean build of one app on a machine without the local ~/.m2 artifacts.
+- Step 2: `release:prepare -DdryRun=true` parses cleanly with the new
+  distributionManagement; a local `-DskipPublishing` staging run of the
+  central-publishing plugin produces a valid, signed bundle.
 - Step 3: `release:prepare -DdryRun=true` clean on all three repos; after
   real releases, the app reactor builds against BOM pins only.
 - Step 4: `just smoke` green on compose with the migrate path consuming the

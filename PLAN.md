@@ -438,8 +438,13 @@ rather than an emergency patch.
   core (domain impls, InMemory twins, verticles, label/catalog machinery) +
   `inventory-impl-pg` (Pg code + Liquibase changesets — the changelog then
   ships in a versioned jar, retiring the Helm copy rule and Nomad checkout
-  mount). Snapshots → GitHub Packages; release destination (Central-public
-  vs GH-Packages-private) is a staged gate; groupId stays
+  mount). ~~Snapshots → GitHub Packages; release destination is a staged
+  gate~~ *(DECIDED 2026-08-21: NO snapshot repository — the workspace
+  builds everything from source; releases go to **Maven Central, public**,
+  under `io.artifexlabs.inventory` via the owner's `infrastructurebuilder`
+  Central account and its signing keys; released container images go to
+  the **Docker Hub `artifexlabs` user**, superseding Phase 14's
+  private-GHCR release destination)*; groupId stays
   `io.artifexlabs.inventory` (renamed from org.lawfulevil 2026-08-18; artifexlabs.io controlled).
   *(EXECUTED 2026-08-19 as the `inventory-impl-root` aggregator repo.)*
 - **Step 1b (accepted 2026-08-19): `inventory-impl-changeset`.** The
