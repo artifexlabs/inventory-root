@@ -263,6 +263,33 @@ inventory-impl-root
     the browser — which also keeps tokens out of URLs. That proxy plus the
     toast UI is the remaining half of step 2.
 
+- **Step 3 DONE 2026-08-21** (feature `more-vertx-bus-module`): the layer
+  boundary is now a MAVEN boundary, enforced by the build.
+  - New `inventory-impl-bus`: the eight worker verticles, `ServiceVerticle`,
+    `BusGuard`, `BusServiceException`, `BusWorkers`, the envelope +
+    `Default*` wire types, both publishers, `StatusLogVerticle`,
+    `CatalogImages` (31 files). Verified by `dependency:tree`: it sees
+    **api + printer-common + vertx-core, nothing else** — zero storage
+    implementations — and the domain modules (`inventory-impl`,
+    `inventory-impl-pg`) see **zero** bus.
+  - Promotions, per the accepted shape: `Ulid`, `Gtin`, and the `UserStore`
+    INTERFACE moved to `inventory-api` (they are contracts, and the bus
+    layer needs them without needing an implementation).
+  - **Owner decision 2026-08-21 — `QrCodes` went to `printer-common`, not
+    api**, taking zxing with it: promoting a QR library into the contracts
+    module would have been a worse trade than letting the bus module depend
+    on the (storage-free) label-rendering module. The rule's PURPOSE — the
+    protocol layer cannot see Postgres from memory — is fully preserved.
+  - `CatalogImages` (a dependency-free HTTP image fetch, used only by
+    `CatalogVerticle`) moved with its verticle; its one test case was
+    lifted out of core's catalog test into `CatalogImagesTest` beside it.
+  - Consumers: server and web-api depend on `inventory-impl-bus`
+    explicitly; the BOM pins it.
+  - **api surface grew** (`StatusEvent`/`StatusEvents`/`StatusPublisher`
+    from step 1, plus `Ulid`/`Gtin`/`UserStore` here) — deliberate, and
+    landed BEFORE the pending `inventory-api` 0.1.0 release so the first
+    published surface is the one we mean to keep.
+
 ## Staged steps (each a milestone-sized chunk)
 
 1. **StatusEvent fabric** — the record + emitting helper in api/impl, the

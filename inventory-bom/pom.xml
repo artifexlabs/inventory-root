@@ -69,6 +69,11 @@
       </dependency>
       <dependency>
         <groupId>io.artifexlabs.inventory</groupId>
+        <artifactId>inventory-impl-bus</artifactId>
+        <version>${inventory.impl.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>io.artifexlabs.inventory</groupId>
         <artifactId>inventory-impl-brother</artifactId>
         <version>${inventory.impl.version}</version>
       </dependency>
