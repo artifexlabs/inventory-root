@@ -157,6 +157,76 @@ images:
 [group('build')]
 build-all: fastjars natives images
 
+# --- submodules --------------------------------------------------------------
+# Nine repos hang off this superproject, and the pointer it RECORDS for each
+# is independent of what is CHECKED OUT. These three recipes move between
+# those two states; picking the wrong direction is how work gets lost, so
+# each says exactly what it will do first.
+
+# Record every submodule's CURRENT checkout as the superproject's pointer.
+[group('submodules')]
+subs-pin:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    moved=$(git submodule status | grep '^+' | awk '{ print $2 }' || true)
+    if [ -z "$moved" ]; then
+      echo "every submodule already matches its recorded pointer — nothing to pin"
+      exit 0
+    fi
+    # A pointer to an UNPUSHED commit is the classic broken superproject: it
+    # clones and it builds here, and CI cannot fetch the commit at all.
+    unpushed=""
+    for m in $moved; do
+      ahead=$(git -C "$m" rev-list --count '@{upstream}..HEAD' 2>/dev/null || echo "?")
+      echo "  $m -> $(git -C "$m" rev-parse --short HEAD) ($(git -C "$m" rev-parse --abbrev-ref HEAD), $ahead ahead of upstream)"
+      [ "$ahead" != "0" ] && unpushed="$unpushed $m"
+    done
+    git add -- $moved
+    echo "staged. NOT committed — write the message yourself."
+    if [ -n "$unpushed" ]; then
+      echo
+      echo "WARNING: these are ahead of their upstream:$unpushed"
+      echo "  push them BEFORE the superproject, or CI gets a pointer it cannot fetch."
+    fi
+
+# Check every submodule out at the pointer the superproject records.
+[group('submodules')]
+[confirm("This moves every submodule to its RECORDED commit, abandoning local checkouts. Continue? (y/N)")]
+subs-restore:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    dirty=$(git submodule --quiet foreach 'test -z "$(git status --porcelain)" || echo $sm_path' || true)
+    if [ -n "$dirty" ]; then
+      echo "FAIL: uncommitted changes in:$(echo $dirty | tr '\n' ' ')"
+      echo "commit or stash them first — this recipe will not discard your work"
+      exit 1
+    fi
+    git submodule update --init --recursive
+    echo "every submodule now sits at the commit this superproject records"
+
+# Fast-forward every submodule to its REMOTE branch tip.
+[group('submodules')]
+[confirm("This moves every submodule to its remote tip, which can orphan unpushed local commits. Continue? (y/N)")]
+subs-latest:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    dirty=$(git submodule --quiet foreach 'test -z "$(git status --porcelain)" || echo $sm_path' || true)
+    if [ -n "$dirty" ]; then
+      echo "FAIL: uncommitted changes in:$(echo $dirty | tr '\n' ' ')"
+      exit 1
+    fi
+    # unpushed commits would be orphaned by the move — refuse rather than lose
+    for m in $(git submodule --quiet foreach 'echo $sm_path'); do
+      ahead=$(git -C "$m" rev-list --count '@{upstream}..HEAD' 2>/dev/null || echo 0)
+      if [ "$ahead" != "0" ]; then
+        echo "FAIL: $m has $ahead unpushed commit(s) — push them or they are orphaned by this move"
+        exit 1
+      fi
+    done
+    git submodule update --remote --recursive
+    echo "every submodule now sits at its remote branch tip"
+    echo "the superproject still records the OLD pointers — run 'just subs-pin' to adopt these"
+
 # --- dev (live-coding; one terminal per tier) --------------------------------
 
 # Fast lib install (no tests) — the dev/packaging prerequisite: everything in
