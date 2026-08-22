@@ -2,9 +2,12 @@
 
 *Decision recorded 2026-08-14; all seven stages EXECUTED the same day, then REVISED
 the same day by the `migrate_to_vertx_eb` work (see "The decision" below — the bus
-gained a second plane and `inventory-server` came back as its worker host). This
-document now describes the architecture as built. Companion to [PLAN.md](PLAN.md),
-[DEPLOYMENT.md](DEPLOYMENT.md) (how to run it), and [RUNBOOK.md](RUNBOOK.md).*
+gained a second plane and `inventory-server` came back as its worker host), then
+EXTENDED 2026-08-21/22 by Phase 21 (PLAN.md): the bus gained a status plane, a
+printer packet protocol, and single-door storage isolation. This document describes
+the architecture as built, including that extension. Companion to [PLAN.md](PLAN.md),
+[deploy/DEPLOYMENT.md](deploy/DEPLOYMENT.md) (how to run it), and
+[RUNBOOK.md](RUNBOOK.md).*
 
 ## The question
 
@@ -15,7 +18,8 @@ possibly the existing request traffic) crossing the clustered Vert.x event bus?
 
 ## The decision
 
-**One authenticated HTTP gateway + a bus with two planes.**
+**One authenticated HTTP gateway + a bus with two planes** *(grown to five kinds
+of traffic by Phase 21 — see the traffic list below)*.
 
 *(Revised 2026-08-14. The original decision was "one HTTP domain service + a bus that
 carries only facts," with `inventory-server` parked. The owner then directed that ALL
@@ -26,14 +30,21 @@ survived that revision untouched — only the topology and the request path chan
   the OIDC exchange, and — decisively — the authentication boundary. Every external
   input (browser, iOS) is authenticated here and nowhere else. It owns no domain
   state in deployment.
-- **`inventory-server` is the bus worker host**: the DAOs (`inventory-impl`),
-  transactions, audit writes, label/QR rendering, and user/token administration run
-  in its verticles. (It was parked by stage 4 and restored by the revision; the
-  parking tag `before-remove-inventory-server` still marks that moment.)
+- **`inventory-server` is the bus worker host**: every worker verticle deploys
+  here. *(Revised again by Phase 21, 2026-08-21:)* the workers no longer hold the
+  DAOs themselves — `StorageVerticle` is the SINGLE holder of every backend (the
+  Pg/memory implementations from the `inventory-impl-root` train), serving
+  whole-unit domain operations at the internal `storage` address. The public
+  verticles are admission + routing (most simply `forward(...)` to storage),
+  Labels and Catalog orchestrate, and label composition/rasterizing happens in
+  `LabelPrinterVerticle` behind the `printer.*` addresses. (inventory-server was
+  parked by stage 4 and restored by the revision; the parking tag
+  `before-remove-inventory-server` still marks that moment.)
 - **North-south request/response stays HTTP.** Browser → web-app → web-api and
   iOS → web-api are unchanged in kind — the reasoning under "why north-south stays
   HTTP" below is still exactly why.
-- **The clustered Vert.x event bus carries two distinct kinds of traffic:**
+- **The clustered Vert.x event bus carries five distinct kinds of traffic**
+  *(two at the 2026-08-14 revision; three more added by Phase 21, 2026-08-21)*:
   1. **Request/reply envelopes** on `inventory.svc.*` — the work itself. A
      `BusEnvelope` (package `io.artifexlabs.inventory.api.bus`) names the action and
      its target, carries a typed payload, and binds the request to the acting user:
@@ -43,6 +54,22 @@ survived that revision untouched — only the topology and the request path chan
   2. **After-commit facts** on `inventory.events.*` — publish-only announcements of
      what already happened, payload-identical to the audit trail. Unchanged from the
      original decision.
+  3. **Operational status events** on `status.events` (and
+     `status.events.<severity>`) — publish-only, best-effort `StatusEvent`s carrying
+     BOTH faces of one fact: a machine face (`code` + structured `subject`) and a
+     human face (`message` + `detail`), so trouble reaches a person instead of a
+     log file. The doorbell, never the record — the audit trail keeps that job.
+     They reach frontends through the gateway's authenticated, actor-scoped SSE
+     stream, NEVER a bus bridge.
+  4. **Printer packets** on `printer.print` / `printer.print-batch` /
+     `printer.feed` — `send` with an ACCEPTANCE ack, never a completion claim: the
+     printers speak one-way TCP 9100, so "printed" was never a fact anyone
+     possessed. The outcome follows on the status plane. Contract:
+     `PrintPackets`, beside the envelope in `io.artifexlabs.inventory.api.bus`.
+  5. **Internal storage operations** on `storage` — every read and write of the
+     backing store, as whole-unit DOMAIN operations (never composable CRUD,
+     because two bus messages can never share a database transaction). Unguarded
+     by design; see the security model.
 - **The `audit_events` table is the durable log of record.** It is already written in
   the same Postgres transaction as every mutation, which makes it a transactional
   outbox we get for free. Consumers replay/catch-up from it; the fact plane is a
@@ -120,10 +147,14 @@ door is cost without function.
 
 *This section covers the FACT plane only. Its sibling — the request/reply envelope
 contract — lives in `io.artifexlabs.inventory.api.bus` (`BusEnvelope`, `BusActions`
-with its action→address→role registry, `Roles`, and the typed payload interfaces),
-documented in that package's `package-info.java`.*
+with its action→address→role registry, `Roles`, the typed payload interfaces, and
+since Phase 21 the `PrintPackets` printer protocol), documented in that package's
+`package-info.java`. The STATUS plane lives beside the fact plane in
+`io.artifexlabs.inventory.api.events` (`StatusEvent`/`StatusEvents`/
+`StatusPublisher`): one record with a machine face and a human face, identity
+stamped at publication so ids and timestamps agree with delivery order.*
 
-Package `io.artifexlabs.inventory.api.events` (new, in `inventory-api`):
+Package `io.artifexlabs.inventory.api.events` (in `inventory-api`):
 
 - **Payload**: the serialized `AuditEvent`, plus a version field —
   `{v: 1, id, ts, principal, action, targetId, details?}`. Additive changes only;
@@ -133,9 +164,10 @@ Package `io.artifexlabs.inventory.api.events` (new, in `inventory-api`):
   `inventory.events.<category>`, category = the action prefix
   (`item`, `location`, `asset`, `region`, `user`, `token`, `label`). The action
   vocabulary is the existing audit vocabulary: `item.create/update/delete/contain/
-  uncontain/move`, `location.create/delete`, `asset.attach/delete`,
-  `region.create/delete`, `user.create/delete/set-admin/identity-link`,
-  `token.revoke`, `label.print`.
+  uncontain/move`, `asset.attach/delete`, `region.create/delete`,
+  `user.create/delete/set-admin/identity-link`, `token.revoke`, `label.print`.
+  (`location.*` survives only in historical audit rows — locations became items
+  with Phase 15's unified containment.)
 - **`EventPublisher`**: `void publish(AuditEvent e)` — fire-and-forget, never throws,
   never blocks; ships with `EventPublisher.NOOP`. Mutation success must never couple
   to publication.
@@ -146,8 +178,9 @@ Package `io.artifexlabs.inventory.api.events` (new, in `inventory-api`):
 ## Emission semantics: publish after commit
 
 Events publish at the same choke points that build audit rows — the private
-`audit(conn, …)` helpers in `PgInventorySystem` / `PgLocationSystem` / `PgAssetStore`
-/ `PgRegionSystem` and the auto-commit `PgAudit.record` path — but **after** the
+`audit(conn, …)` helpers in `PgInventorySystem` / `PgAssetStore` /
+`PgRegionSystem` and the auto-commit `PgAudit.record` path (`PgLocationSystem` is
+gone; locations became items with Phase 15) — but **after** the
 transaction (or statement) completes successfully. Publishing inside the transaction
 is rejected: it announces changes that may roll back. This is a dual-write and it is
 accepted: if the process dies between commit and publish, the row exists, the bus
@@ -156,7 +189,9 @@ need a relay/CDC daemon that the catch-up protocol makes unnecessary.
 
 ## Consumer catch-up protocol
 
-1. `audit_events` gains `seq BIGSERIAL` (indexed; changeset `013-audit-seq.yaml`).
+1. `audit_events` gains `seq BIGSERIAL` (indexed; shipped as changeset
+   `013-audit-seq.yaml`, since folded into `004-audit.yaml` in the
+   `inventory-impl-changeset` module by the schema consolidation).
    ULIDs are assigned before commit, so ULID order can disagree with commit order
    under concurrency; `seq` is the reliable cursor, read with a small overlap.
 2. `AuditReader` gains `since(long seq, int limit)`.
@@ -178,6 +213,18 @@ need a relay/CDC daemon that the catch-up protocol makes unnecessary.
   Trust level picks the surface.
 - **Fact-plane payloads are data.** They already flow to the audit UI, so they carry
   no secrets; keep it that way.
+- **Status-plane payloads are user-scoped operational detail** *(Phase 21)*: no
+  secrets, but they name items, formats, and failures per acting user. Their ONLY
+  egress is the gateway's authenticated SSE stream, filtered by actor — a user sees
+  events whose `actor` is them, admins additionally see unattributed system faults,
+  and the firehose is admin-opt-in only. The bus itself is never bridged to a
+  browser or app (the web-app PROXIES the stream precisely so no token reaches the
+  browser).
+- **The `storage` address is unguarded by DESIGN** *(Phase 21)*: admission (fabric
+  token + role) happens exactly once, at the public service verticle that forwards
+  the envelope verbatim. That is sound only because membership is the boundary —
+  the address must never be reachable from outside the bus, the same invariant
+  that keeps 7800/15701 unpublished.
 - **Envelope-plane payloads are NOT all inert** *(2026-08-14 revision)*: every
   envelope carries the shared fabric token, and the pre-auth `auth.login`/
   `auth.exchange` actions carry credentials and the exchange claim. This is
@@ -260,15 +307,17 @@ mandatory (no workers, no API), while `inventory.events.bus` still defaults to
    **REVISED same day:** with the bus mandatory rather than opt-in, the overlay was
    merged into `docker-compose.yml` and deleted — the base stack now runs a
    three-member cluster (gateway .11, server .12, exporter .13) on the same
-   internal-only static-IP network. `docker-compose.release.yml` (versioned GHCR
-   images) is the only overlay today; see [DEPLOYMENT.md](DEPLOYMENT.md).
+   internal-only static-IP network. `docker-compose.release.yml` (versioned
+   images — public Docker Hub `artifexlabs` since 2026-08-21) is the only overlay
+   today; see [deploy/DEPLOYMENT.md](deploy/DEPLOYMENT.md).
 7. **CI + runbook** — **EXECUTED 2026-08-14** (CI gate lands with the next push).
    `ClusteredBusTest` — two clustered Vert.x nodes over loopback, same stack as the
    overlay — runs inside plain `mvn verify`, so CI exercises the clustered fabric
    on every build. RUNBOOK gains the events/cluster section: ports, split-brain
    symptoms, "a consumer is just a cursor" recovery. NOTE for the eventual push:
    `inventory-exporter` must be added to the `SUBMODULE_TOKEN` fine-grained PAT's
-   repository list or CI checkout will fail.
+   repository list or CI checkout will fail. *(Resolved: the repos are public and
+   CI checks everything out with the default token.)*
 
 ## Risks and open unknowns
 
@@ -283,7 +332,7 @@ mandatory (no workers, no API), while `inventory.events.bus` still defaults to
   log) — pg mode only, matching the existing constraint.
 - ~~**Consolidation ripples**~~ — swept twice (stage 4, then the revision): PLAN.md,
   RUNBOOK, compose, and the Justfile now describe the gateway + worker topology, and
-  [DEPLOYMENT.md](DEPLOYMENT.md) is the deploy method of record.
+  [deploy/DEPLOYMENT.md](deploy/DEPLOYMENT.md) is the deploy method of record.
 - **The bus is now an availability dependency for the API** *(revision)*: with
   workers remote, a partition means gateway requests fail 503 — request/reply has no
   store-and-forward. Deliberate: the alternative was a gateway that silently accepts
@@ -296,7 +345,16 @@ mandatory (no workers, no API), while `inventory.events.bus` still defaults to
 - **Two producer copies** *(revision)*: `InventoryBackendProducer` exists in both
   `inventory-server` and `inventory-web-api` (the latter only for embedded
   single-process mode). They must stay in step — a printer or storage option added
-  to one belongs in the other.
+  to one belongs in the other. *(Re-confirmed by Phase 21: the status-publisher
+  wiring had to land in both.)*
+- **Storage isolation adds a hop** *(Phase 21)*: every data access crosses the bus
+  to `StorageVerticle` — in-process in embedded mode, the network in remote mode.
+  Accepted for single-flight storage discipline; chatty BFF views may eventually
+  want batch operations added to the storage vocabulary. The companion rule is
+  absolute: storage operations are WHOLE units of work, because two messages can
+  never share a transaction — and meaning that rides on exception types does not
+  survive the message boundary either (`catalog.create-item`'s 409→500 regression
+  was the lesson; the translation now lives on the storage side).
 - **Role granularity is a single boolean** *(revision; see the security model)*: the
   bus enforces three roles rigorously, but every user gets read+write and only the
   admin flag varies. A read-only or per-location role needs stored roles behind
