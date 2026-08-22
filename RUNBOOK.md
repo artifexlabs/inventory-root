@@ -286,7 +286,7 @@ cluster manager is not yet proven under native) and inventory-web-app
 (native). It ends by drafting a GitHub Release with the run-this-version
 snippet. Images may be built from unreleased Maven artifacts — images are
 removable/overwritable; Maven Central releases are not, and follow their
-own ceremony (MAVEN_RELEASES.md).
+own ceremony (PLAN.md Phase 19).
 
 After the FIRST release: verify the four `artifexlabs/*` repos on Docker
 Hub carry the new tag and are public.

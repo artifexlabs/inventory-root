@@ -49,7 +49,7 @@ services:
 
   # Controlled schema migration (the day-2 path): the inventory-migrate
   # image — Liquibase + the inventory-impl-changeset JAR on its classpath
-  # (changelog-from-jar, MAVEN_RELEASES.md step 4; the bind mount is gone).
+  # (changelog-from-jar, PLAN.md Phase 19 step 4; the bind mount is gone).
   # Build the changeset module first (`just libs`) so the jar exists; the
   # `just migrate`/`just rollback` recipes pass --build to stay fresh.
   # Runs to completion, then exits.

@@ -18,7 +18,7 @@ Containers have locations (Denoted by name and by lat/long)
 Any item can effectively be called a container by virtue of putting things into it.
 
 
-This is a java application built with maven using its parent `inventory-parent`, which since 2026-08-18 lives OUTSIDE this workspace at `../inventory-parent` (its own repo, no longer a submodule) and parents off `io.artifexlabs:artifex-maven-parent`. Building this workspace therefore requires both of those installed or published — see [MAVEN_RELEASES.md](MAVEN_RELEASES.md). The apis need to be publishable as a backend so that other languages can use them,
+This is a java application built with maven using its parent `inventory-parent`, which since 2026-08-18 lives OUTSIDE this workspace at `../inventory-parent` (its own repo, no longer a submodule) and parents off `io.artifexlabs:artifex-maven-parent`. Building this workspace therefore requires both of those installed or published — see PLAN.md Phase 19. The apis need to be publishable as a backend so that other languages can use them,
 
 Any given object must have a unique id that can be used to create a fairly small QR code that will identifiy a specific item in the inventory-webapp's API compontnt.
 

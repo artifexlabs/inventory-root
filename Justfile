@@ -37,7 +37,7 @@ ios_simulator := env('INVENTORY_IOS_SIMULATOR', 'iPhone 17')
 # name resolving from the workspace root exactly as before the move.
 compose := "docker compose --project-directory . -f deploy/docker-compose.yml"
 
-# The extracted library repos (MAVEN_RELEASES.md), built IN THIS ORDER before
+# The extracted library repos (PLAN.md Phase 19), built IN THIS ORDER before
 # the reactor: api -> impl -> bom. They are workspace submodules (artifexlabs-org
 # repos) but deliberately NOT reactor modules — they install to ~/.m2 and the
 # apps consume them as jars. inventory-parent is NOT here anymore: released

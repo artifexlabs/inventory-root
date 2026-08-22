@@ -44,7 +44,7 @@ jobs:
         with:
           submodules: recursive
           token: ${{ secrets.SUBMODULE_TOKEN || github.token }}
-      # The lib submodules are NOT reactor modules (MAVEN_RELEASES.md): build
+      # The lib submodules are NOT reactor modules (PLAN.md Phase 19): build
       # and install them in dependency order, then the app reactor consumes
       # them from the local repository. artifex-maven-parent resolves from
       # Central (io.artifexlabs.parents:artifex-maven-parent:2).

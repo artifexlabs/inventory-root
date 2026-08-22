@@ -32,7 +32,7 @@ helm install inventory deploy/helm/inventory \
 
 The migrate Job runs the `inventory-migrate` image — Liquibase with the
 `inventory-impl-changeset` jar on its classpath — so the changelog arrives
-versioned inside the image (changelog-from-jar, MAVEN_RELEASES.md step 4).
+versioned inside the image (changelog-from-jar, PLAN.md Phase 19 step 4).
 The old hand-copied `files/changelog/` ConfigMap and its re-copy
 maintenance rule are RETIRED: a new changeset ships by releasing a new
 image and bumping `image.tag`; the Job applies it on the next

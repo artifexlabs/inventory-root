@@ -121,7 +121,7 @@ should mean investing in some of this, not letting them stay a bare name+pin.
 
 | Module | Role |
 |---|---|
-| `inventory-parent` *(RELOCATED 2026-08-18 to `../inventory-parent`, beside this workspace — no longer a submodule or reactor module)* | Parent pom: `${revision}`/`${inventory.version}`, inventory dependencyManagement, flatten executions. Now parents off **`io.artifexlabs:artifex-maven-parent`** (which owns the Quarkus BOM import, the `native` profile, flatten config, and shared build properties, and itself parents off `ibparent`). The six modules pin it by LITERAL version — see [MAVEN_RELEASES.md](MAVEN_RELEASES.md). |
+| `inventory-parent` *(RELOCATED 2026-08-18 to `../inventory-parent`, beside this workspace — no longer a submodule or reactor module)* | Parent pom: `${revision}`/`${inventory.version}`, inventory dependencyManagement, flatten executions. Now parents off **`io.artifexlabs:artifex-maven-parent`** (which owns the Quarkus BOM import, the `native` profile, flatten config, and shared build properties, and itself parents off `ibparent`). The six modules pin it by LITERAL version — see PLAN.md Phase 19. |
 | [inventory-api/](inventory-api/) | Domain model, service interfaces, JSON wire contracts, audit/auth/user interfaces, constants. Depends on `vertx-core` only for `JsonObject`/`JsonArray`. |
 | [inventory-impl/](inventory-impl/) | Default implementations: Postgres repositories, transactional `InventorySystem`, audit sink, Liquibase changelogs. CDI beans, minimal Quarkus coupling. |
 | [inventory-server/](inventory-server/) | **PARKED 2026-08-14** (HTTP consolidation, [VERTICLES.md](VERTICLES.md)): its REST surface, backend wiring, and OpenAPI moved into `inventory-web-api`; the module is out of the reactor and compose. History and code remain in its repo, tagged `before-remove-inventory-server`. |
@@ -262,7 +262,7 @@ unknown.*
   which parents off ibparent 112. Since neither artifex-maven-parent nor the
   relocated inventory-parent is published yet, **CI cannot resolve the parent
   chain until they are** — local builds work only from `~/.m2`. Tracked as the
-  urgent step 0 in [MAVEN_RELEASES.md](MAVEN_RELEASES.md).)*
+  urgent step 0 in PLAN.md Phase 19.)*
 - **CI blocker #2 — private-submodule checkout, RESOLVED 2026-08-13**: with the
   parent resolvable, CI surfaced the next failure: all `inventory-*` repos are
   private, and the workflow's `GITHUB_TOKEN` only reaches `inventory-root`, so
@@ -428,7 +428,7 @@ rather than an emergency patch.
   explicitly OUT (they are functional artifacts with their own golden-file
   discipline).
 
-### Phase 19 — Maven artifact extraction: parent/api/impl release independently *(added 2026-08-17; PARTIALLY EXECUTED 2026-08-18/19 — the three left the reactor with literal versions in artifexlabs-org repos (still workspace submodules), `just libs` builds them ahead of the app reactor, artifex-maven-parent 2 pinned from Central; full status in [MAVEN_RELEASES.md](MAVEN_RELEASES.md))*
+### Phase 19 — Maven artifact extraction: the libraries release independently *(added 2026-08-17; EXECUTED 2026-08-18→22 — planned via the since-retired staging doc MAVEN_RELEASES.md; **`0.1.0` is released to Maven Central** and the apps consume it)*
 - Activates Phase 14's revisit clause (an external consumer of the jars now
   exists by intent): inventory-parent, inventory-api, and inventory-impl
   leave the reactor and its `${revision}`, gaining literal versions released
@@ -461,6 +461,60 @@ rather than an emergency patch.
   core into a Liquibase-CLI image; deploy mounts point at
   `inventory-impl-root/inventory-impl-changeset/src/main/resources` until
   step 4 retires path-mounting entirely.
+
+- **As built.** Five repos release independently, all public on Maven
+  Central under `io.artifexlabs.inventory` via the owner's
+  `infrastructurebuilder` account:
+  - `inventory-parent` (**released `1`**) — third-party dependency
+    management, Central publishing, the GPG release profile, and the
+    release-plugin conventions every library inherits.
+  - `inventory-api` (**`0.1.0`**) — the contracts, including everything
+    Phase 21 added (`StatusEvent`/`StatusEvents`/`StatusPublisher`,
+    `Ulid`, `Gtin`, `UserStore`, `PrintPackets`).
+  - `inventory-impl-root` (**`0.1.0`**) — one release train, six modules
+    versioned as one via `autoVersionSubmodules`: core, `-changeset`,
+    `-pg`, `-printer-common`, `-bus`, `-brother`, `-zebra`.
+  - `inventory-bom` (**`0.1.0`**) — the version authority. Started as a
+    module of the app reactor and **moved to its own repo 2026-08-21**,
+    because a released artifact needs a release ceremony and the app
+    reactor's tag→images flow provides none.
+  - The four apps import the BOM and keep the Phase 14 tag→images flow,
+    with released images now going to Docker Hub `artifexlabs`.
+- **Decisions that shaped it**: NO snapshot repository (the workspace
+  builds from source; released artifacts are the only published form);
+  Central-public over private GH Packages; **releases run from the owner's
+  machine only** — CI verifies, it never releases, so no credential or
+  signing key leaves that machine and nothing automated can trigger an
+  irreversible publish; `autoPublish=false`, so every deploy only STAGES a
+  bundle for a human to publish in the portal.
+- **Four lessons worth keeping, each paid for:**
+  1. *A released pom may not carry SNAPSHOTs in dependencyManagement.*
+     Central rejected the first `inventory-parent` bundle because its dM
+     pinned the inventory artifacts at `0.1.0-SNAPSHOT` — a structural
+     chicken-and-egg, since the parent releases BEFORE the libraries it
+     referenced. The fix was the BOM's real arrival: the parent manages
+     third-party versions only, and the BOM became the inventory-family
+     authority the apps import.
+  2. *`autoPublish=false` is what makes a mistake survivable.* The staged
+     `inventory-api 0.1.0` was deliberately DROPPED rather than published,
+     which is the only reason Phase 21's additions shipped in the first
+     release instead of a hurried `0.2.0`. Central publications cannot be
+     replaced or withdrawn.
+  3. *"No pinentry" is not a GPG misconfiguration.* maven-gpg-plugin
+     appends `--pinentry-mode error` in batch mode, so gpg is forbidden
+     from prompting and can only use an ALREADY-CACHED passphrase. With a
+     600-second cache and a full build between signings, the cache expires
+     mid-release. The plugin's own remedy is `MAVEN_GPG_PASSPHRASE`.
+  4. *The deployment name is the last module, not the train.* The Central
+     plugin buffers every module and uploads one bundle during the last
+     reactor project, so the portal labelled the whole impl train
+     `inventory-impl-pg`. Overridden in `inventory-impl-root` from the
+     next release on; contents were always correct.
+- **Per-release chore that remains** (the cost this phase always recorded):
+  a cross-cutting change still means release api → bump impl-root's
+  `inventory.api.version` → release the impl train → re-pin and release the
+  BOM → bump the apps' BOM import. The BOM is what keeps that ceremony
+  honest: only combinations a build verified together ever deploy.
 
 ### Phase 20 — Alternate storage backends: MySQL, then possibly SQLite / MongoDB / DynamoDB *(added 2026-08-19; STAGED, not scheduled — each backend is its own opt-in milestone with a go/no-go gate)*
 

@@ -3,7 +3,7 @@
 # the PUBLIC Docker Hub namespace docker.io/artifexlabs/<module> (decided
 # 2026-08-21, superseding the private-GHCR destination). Images may be built
 # from unreleased Maven artifacts — images can be removed or overwritten;
-# Maven Central releases cannot, and happen separately (MAVEN_RELEASES.md).
+# Maven Central releases cannot, and happen separately (PLAN.md Phase 19).
 #
 # Images match what deploy/docker-compose.yml actually deploys: JVM images for the
 # three bus members (the vertx-infinispan cluster manager is not yet proven
@@ -59,7 +59,7 @@ jobs:
           mvn -version
       - name: Derive version from tag
         run: echo "VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
-      # The lib submodules are NOT reactor modules (MAVEN_RELEASES.md): build
+      # The lib submodules are NOT reactor modules (PLAN.md Phase 19): build
       # and install them at their own literal versions, in dependency order;
       # -Drevision versions only the four apps.
       - name: Build and install the libs (parent -> api -> impl)
