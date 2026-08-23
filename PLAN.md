@@ -528,6 +528,11 @@ already the hottest in the codebase; nothing below is committed until a
 backend individually earns its keep.
 
 - **Step 0 (prerequisite for ANY second backend): extract the parity TCK.**
+  *(STARTED 2026-08-22 as part of Phase 22: `InventorySystemTck` and
+  `DataSystemTck` exist in `inventory-impl`'s test tree, with memory and Pg
+  harnesses running both. It paid for itself on the first Postgres run — see
+  Phase 22's lessons. The remaining kits — assets/regions, auth, audit —
+  are the rest of this step.)*
   Today the InMemory and Pg test suites are hand-written twins; a third
   backend would make it three hand-synced copies. Before MySQL lands,
   refactor the behavioral assertions (CRUD, containment, tags/identities,
@@ -671,9 +676,11 @@ as one publication that cannot drift.
      connection-error event.* Severity stays the event NAME for
      programmatic consumers, but the browser proxy re-emits unnamed events
      with severity inside the JSON.
-- **Known gaps, deliberately left**: `correlationId` is unpopulated
-  (`BusEnvelope` has no request id yet), so printer events are
-  unattributed and route to admins; the storage hop tax is accepted (an
+- ~~**Known gap: `correlationId` is unpopulated**~~ — CLOSED by Phase 22
+  (2026-08-22): `BusEnvelope` carries a `requestId` minted at the gateway,
+  and printer outcomes quote it back, so a refusal reaches the person who
+  asked instead of only an administrator.
+- **Known gap, deliberately left**: the storage hop tax is accepted (an
   in-process hop embedded, a network hop remote) and chatty BFF views may
   later want batch storage operations.
 - **Remaining gate (manual, needs hardware)**: force a printer refusal —
@@ -681,6 +688,96 @@ as one publication that cannot drift.
   confirm a banner appears within ~2 s while the app is foregrounded. That
   is the end-to-end proof that a physical failure becomes a human
   notification.
+
+### Phase 22 — The 0.2.0 break train: attributable outcomes, data manifests, a release train, and the parity TCK *(added and EXECUTED 2026-08-22 — planned via the since-retired staging doc DO23_7_5.md)*
+
+Four pieces, deliberately shipped as ONE api-breaking train because Phase
+19's chore costs the same ceremony whether it carries one change or five,
+and the pre-1.0 window for breaking `inventory-api` is closing now that
+`0.1.0` is public on Central and real labels are on real objects.
+
+- **`correlationId`: asynchronous outcomes find the person who asked.**
+  `BusEnvelope` gains a `requestId`, minted once per HTTP request at the
+  gateway and carried unchanged through storage forwards, derived
+  operations, and printer packets. Outcomes that arrive long after the 202
+  quote it back as their `StatusEvent.correlationId`, which is what turns
+  Phase 21's actor-scoped SSE from a mechanism into a delivered feature: a
+  tape-mismatch refusal now reaches its user, not just an administrator.
+  - A wire envelope WITHOUT a request id is refused (400), not given a
+    minted one — a fabricated correlation would claim a link to a cause we
+    never saw. `BusGuard` correlates role denials but deliberately NOT
+    bad-fabric-token ones, whose envelope is untrusted.
+  - Scope was smaller than planned: `PrintPackets` already carried
+    `actor`/`correlationId` and `LabelsVerticle` already attributed; only
+    the id itself was missing, passed as a literal `null` in three places.
+- **Data manifests: the last unstarted README requirement** (ongoing item
+  6 — physical objects AND data). A medium's contents are a MANIFEST of
+  `(path, size, hash, mime type)` rows, NOT a subtree of items: files have
+  no par values, labels, or containment of their own. The payoff is
+  `findByHash` ("which disc has this file?", "is this already archived?")
+  and `findMirrorsOf` (same content at the same path).
+  - **Archives are the one exception**, because an archive is both a file
+    and a container: it stays a row in its medium's manifest AND becomes an
+    item with `DataInfo.archive = true` contained by the medium, carrying
+    its own manifest, recursively. `DataInfo.archive` has meant exactly
+    this since Phase 1; this is the first code to use it.
+  - **Storage normalizes.** Mime types and every path COMPONENT live in
+    dictionary tables; an entry holds an id sequence plus two byte-hashes —
+    the content digest, and a digest of the scope-relative path, so the
+    mirror question is an indexed compare rather than a sequence match.
+    `path_elements` is append-only by contract: a rename interns new
+    components and rewrites the sequence, because other rows still point at
+    the old ids. None of this crosses the API, which speaks readable
+    strings — which is why the memory twin can hold plain strings and still
+    be a true parity reference.
+  - **`sha256` is the default** (owner-confirmed): media are the
+    bottleneck, not the hash; it is collision-resistant, which matters when
+    a false "already archived" silently loses data; and it is what
+    `sha256sum` already prints — so `find | sha256sum | curl` is the entire
+    ingestion story and no client tool exists. `HashAlgorithm` is a small
+    enum so BLAKE3 is a one-row change if local NVMe trees ever make
+    hashing the bottleneck. Dedup is per-algorithm by nature, so the
+    default is sticky on purpose.
+- **The library release train** (Phase 19's recorded per-release chore, now
+  recipes): `train-plan`, `train-api`, `train-impl`, `train-bom`,
+  `train-apps`. Five recipes and NOT one command, because
+  `autoPublish=false` puts a human portal-publish between every step; a
+  single command would have to lie about that or block on it. The guards
+  encode already-paid-for lessons — `MAVEN_GPG_PASSPHRASE` checked first,
+  no inventory SNAPSHOT pins in anything about to release, clean tree,
+  right branch, tag free — and nothing pushes.
+- **The parity TCK arrives early** (Phase 20's step 0), because writing a
+  Pg twin for the new data code by hand would have been more work than
+  extracting the kit. `InventorySystemTck` and `DataSystemTck` hold the
+  behavior; each backend ships a thin harness.
+
+**Three lessons worth keeping, each paid for:**
+  1. *A parity kit finds what twin suites cannot.* On its first Postgres
+     run the kit failed one assertion: `item.delete` audited with NO
+     details, while the memory twin had always recorded the deleted item.
+     The audit trail is the only place a deleted item survives, so Postgres
+     was wrong — fixed with `DELETE ... RETURNING` inside the same
+     transaction. The two hand-written suites had coexisted since the Pg
+     backend was first written without either noticing — and that is the
+     point: the drift took no time at all to appear, which is why the kit
+     is a prerequisite for a THIRD backend rather than a cleanup after one.
+  2. *JAX-RS root-resource matching still does not backtrack.* The
+     item-scoped manifest routes had to live on `ItemsResource`, because a
+     resource rooted at `/api/v1/items` claims every path beneath it and a
+     second resource declaring `/items/{id}/data/...` is simply never
+     reached. The eighth milestone recorded this trap in 2026-08-07; it
+     cost a 404 to rediscover.
+  3. *Formatting is a close-out step, not a per-commit step.* Running
+     `formatter:format` mid-work reflowed dozens of untouched files (the
+     tree carries pre-existing javadoc-width drift), burying the actual
+     change and forcing selective reverts to keep branches reviewable. The
+     rule is now: commit unformatted, format once before the branch closes.
+
+**Remaining**: the iOS surface for manifests (deferred
+contracts-settle-first, the Phase 15/16 pattern); the large-directory
+path-layout measurement that decides the final index shape; the rest of the
+TCK kits (assets/regions, auth, audit); and the train's first real run,
+which IS the 0.2.0 release.
 
 ## First milestone (Phase 1, implementable detail)
 
@@ -1673,7 +1770,15 @@ free. Item 4 is standalone.
       the value "orange".  The first would be rendered as "scuba" and the second
       would be rendered as "color=orange".  We should be able to search things
       based on tags, either the simple existence or matching a glob or regex pattern
-- [ ] **6. Data items are distinct from physical items** - This is already partially
+- [x] **6. Data items are distinct from physical items** *(DONE — Phase 22,
+      2026-08-22: a medium's contents are a MANIFEST of
+      (path, size, hash, mime type), not a subtree of items; archives are the
+      one exception and become contained `DataInfo.archive=true` items
+      carrying their own manifests, recursively. `findByHash` answers "which
+      disc has this file?" and `findMirrorsOf` answers "are these two media
+      the same?". Ingestion eats `sha256sum` output, so no client tool
+      exists. Remaining: the iOS surface, deferred contracts-settle-first,
+      and the large-tree path-layout measurement.)* - This is already partially
       true, but there should be some sort  of container that is a network share mount
       or a CD or DVD or other removable medium that describes the contents of that
       medium using hashes and relative paths.  This would be rendered very differently

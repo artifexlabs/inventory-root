@@ -4,8 +4,9 @@
 the same day by the `migrate_to_vertx_eb` work (see "The decision" below — the bus
 gained a second plane and `inventory-server` came back as its worker host), then
 EXTENDED 2026-08-21/22 by Phase 21 (PLAN.md): the bus gained a status plane, a
-printer packet protocol, and single-door storage isolation. This document describes
-the architecture as built, including that extension. Companion to [PLAN.md](PLAN.md),
+printer packet protocol, and single-door storage isolation, and again 2026-08-22 by
+Phase 22 (an originating request id on every envelope, and the `data.*` manifest
+vocabulary). This document describes the architecture as built. Companion to [PLAN.md](PLAN.md),
 [deploy/DEPLOYMENT.md](deploy/DEPLOYMENT.md) (how to run it), and
 [RUNBOOK.md](RUNBOOK.md).*
 
@@ -70,6 +71,14 @@ survived that revision untouched — only the topology and the request path chan
      backing store, as whole-unit DOMAIN operations (never composable CRUD,
      because two bus messages can never share a database transaction). Unguarded
      by design; see the security model.
+
+  *(Phase 22, 2026-08-22:)* every envelope now also carries a **`requestId`**,
+  minted once at the gateway and passed unchanged through forwards, derived
+  operations, and printer packets. It is what lets an outcome that arrives long
+  after the reply — the only kind a unidirectional printer can give — be traced
+  back to the request that caused it, and therefore delivered to the user who
+  made it rather than only to an administrator. A wire envelope without one is
+  refused: a minted substitute would claim a cause we never saw.
 - **The `audit_events` table is the durable log of record.** It is already written in
   the same Postgres transaction as every mutation, which makes it a transactional
   outbox we get for free. Consumers replay/catch-up from it; the fact plane is a
@@ -347,6 +356,12 @@ mandatory (no workers, no API), while `inventory.events.bus` still defaults to
   single-process mode). They must stay in step — a printer or storage option added
   to one belongs in the other. *(Re-confirmed by Phase 21: the status-publisher
   wiring had to land in both.)*
+- **Manifest ingestion rides one envelope** *(Phase 22)*: a medium's whole
+  file listing arrives as a single `data.replace-manifest` message, because
+  splitting it would tear the transaction that makes a manifest a snapshot.
+  Envelope payloads are fully buffered (above), so a listing large enough to
+  strain that is the recorded trigger for chunked staging on the storage side —
+  not for making the operation composable.
 - **Storage isolation adds a hop** *(Phase 21)*: every data access crosses the bus
   to `StorageVerticle` — in-process in embedded mode, the network in remote mode.
   Accepted for single-flight storage discipline; chatty BFF views may eventually

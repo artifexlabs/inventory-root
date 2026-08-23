@@ -562,3 +562,156 @@ _release-tags version:
     echo "  git push origin v{{ version }}            # triggers release.yml -> PUBLIC Docker Hub images + draft release"
     echo "  git submodule foreach 'git push origin v{{ version }}'"
     echo "then verify the four artifexlabs/* repos on Docker Hub carry the new tag (RUNBOOK: 'Cutting a release')."
+
+# --- library release train (PLAN.md Phase 19's per-release chore) -------------
+#
+# Releasing a cross-cutting change means five ordered steps: api, then the
+# impl train pinned to it, then the BOM pinned to both, then the apps' BOM
+# import. This is that sequence as recipes.
+#
+# It is deliberately NOT one command. central-publishing-maven-plugin runs
+# with autoPublish=false, so each step only STAGES a bundle and a human
+# publishes it in the Central portal before the next step can resolve it.
+# A single `train` recipe would have to either lie about that or block on it.
+#
+# Releases run from a local machine ONLY (owner decision, 2026-08-21): CI
+# verifies, never releases, so no signing key or credential leaves this
+# machine and nothing automated can trigger an irreversible publish.
+
+lib_repos := "inventory-api inventory-impl-root inventory-bom"
+app_repos := "inventory-web-api inventory-web-app inventory-server inventory-exporter"
+
+# What the train would do: current pins, local versions, and preflight state.
+[group('release-train')]
+train-plan:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    echo "library release train — current state"
+    echo
+    printf "  %-22s %-18s %s\n" REPO LOCAL-VERSION BRANCH
+    for d in {{ lib_repos }}; do
+      v=$(cd "$d" && mvn -q -N -o help:evaluate -Dexpression=project.version -DforceStdout 2>/dev/null | tail -1)
+      printf "  %-22s %-18s %s\n" "$d" "$v" "$(git -C "$d" branch --show-current)"
+    done
+    echo
+    echo "  pins:"
+    printf "    impl-root -> api      %s\n" "$(just _prop inventory-impl-root inventory.api.version)"
+    printf "    bom       -> api      %s\n" "$(just _prop inventory-bom inventory.api.version)"
+    printf "    bom       -> impl     %s\n" "$(just _prop inventory-bom inventory.impl.version)"
+    for d in {{ app_repos }}; do
+      printf "    %-9s -> bom      %s\n" "$(echo $d | sed 's/inventory-//')" "$(just _prop "$d" inventory.bom.version)"
+    done
+    echo
+    echo "  preflight:"
+    if [ -n "${MAVEN_GPG_PASSPHRASE:-}" ]; then echo "    MAVEN_GPG_PASSPHRASE  set"
+    else echo "    MAVEN_GPG_PASSPHRASE  NOT SET — signing will fail mid-train (see RUNBOOK: pinentry)"; fi
+    for d in {{ lib_repos }} {{ app_repos }}; do
+      [ -z "$(git -C "$d" status --porcelain)" ] || echo "    $d has uncommitted changes"
+    done
+    echo
+    echo "  order: train-api X -> portal -> train-impl X X -> portal -> train-bom X X X -> portal -> train-apps X"
+
+# Read one Maven property from a repo's effective pom.
+_prop dir property:
+    @cd {{ dir }} && mvn -q -N -o help:evaluate -Dexpression={{ property }} -DforceStdout 2>/dev/null | tail -1
+
+# Step 1: release inventory-api.
+[group('release-train')]
+train-api version:
+    @just _train-checks inventory-api {{ version }}
+    cd inventory-api && mvn -B release:prepare release:perform \
+      -DreleaseVersion={{ version }} -Dtag=v{{ version }} -DautoVersionSubmodules=true
+    @just _portal-step inventory-api {{ version }} "train-impl {{ version }} <impl-version>"
+
+# Step 2: pin the impl train to the released api, then release the train.
+[group('release-train')]
+train-impl api_version version:
+    @just _train-checks inventory-impl-root {{ version }}
+    cd inventory-impl-root && mvn -q versions:set-property -Dproperty=inventory.api.version \
+      -DnewVersion={{ api_version }} -DgenerateBackupPoms=false && mvn -q tidy:pom
+    @just _no-snapshot-pins inventory-impl-root
+    cd inventory-impl-root && git commit -qam "Pin inventory-api {{ api_version }} for the {{ version }} release" || true
+    just libs
+    cd inventory-impl-root && mvn -B release:prepare release:perform \
+      -DreleaseVersion={{ version }} -Dtag=v{{ version }} -DautoVersionSubmodules=true
+    @just _portal-step inventory-impl-root {{ version }} "train-bom {{ api_version }} {{ version }} <bom-version>"
+
+# Step 3: re-pin the BOM to both released libraries, then release it.
+[group('release-train')]
+train-bom api_version impl_version version:
+    @just _train-checks inventory-bom {{ version }}
+    cd inventory-bom && mvn -q versions:set-property -Dproperty=inventory.api.version \
+      -DnewVersion={{ api_version }} -DgenerateBackupPoms=false \
+      && mvn -q versions:set-property -Dproperty=inventory.impl.version \
+      -DnewVersion={{ impl_version }} -DgenerateBackupPoms=false && mvn -q tidy:pom
+    @just _no-snapshot-pins inventory-bom
+    cd inventory-bom && git commit -qam "Pin api {{ api_version }} / impl {{ impl_version }} for the {{ version }} release" || true
+    cd inventory-bom && mvn -B release:prepare release:perform \
+      -DreleaseVersion={{ version }} -Dtag=v{{ version }}
+    @just _portal-step inventory-bom {{ version }} "train-apps {{ version }}"
+
+# Step 4: point the four apps at the released BOM and prove the whole set builds.
+[group('release-train')]
+train-apps bom_version:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    for d in {{ app_repos }}; do
+      [ -z "$(git -C "$d" status --porcelain)" ] || { echo "FAIL: $d is dirty"; exit 1; }
+    done
+    for d in {{ app_repos }}; do
+      (cd "$d" && mvn -q versions:set-property -Dproperty=inventory.bom.version \
+        -DnewVersion={{ bom_version }} -DgenerateBackupPoms=false && mvn -q tidy:pom)
+      echo "pinned $d -> inventory-bom {{ bom_version }}"
+    done
+    # a clean verify, because only a build proves the combination coheres —
+    # which is the entire reason the BOM exists
+    just verify
+    for d in {{ app_repos }}; do
+      (cd "$d" && git commit -qam "Consume inventory-bom {{ bom_version }}")
+    done
+    echo
+    echo "the apps now consume inventory-bom {{ bom_version }} and the reactor is green."
+    echo "NOTHING pushed (house rule). When you are ready:"
+    for d in {{ app_repos }}; do echo "  git -C $d push"; done
+    echo "  git commit -am 'Consume inventory-bom {{ bom_version }}' && git push   # superproject pointers"
+
+# Preconditions for a library release step.
+_train-checks dir version:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    # checked FIRST: it is the one failure whose fix is outside the repo, and
+    # the one that otherwise surfaces halfway through a signing run
+    [ -n "${MAVEN_GPG_PASSPHRASE:-}" ] \
+      || { echo "FAIL: MAVEN_GPG_PASSPHRASE is unset; signing will fail partway through the release"; exit 1; }
+    [[ "{{ version }}" =~ ^[0-9]+\.[0-9]+\.[0-9]+([-.].+)?$ ]] \
+      || { echo "FAIL: '{{ version }}' is not a semver version"; exit 1; }
+    [ -z "$(git -C {{ dir }} status --porcelain)" ] \
+      || { echo "FAIL: {{ dir }} has uncommitted changes"; git -C {{ dir }} status --short; exit 1; }
+    BRANCH=$(git -C {{ dir }} branch --show-current)
+    [[ "$BRANCH" == "develop" || "$BRANCH" == "main" || "$BRANCH" == "master" ]] \
+      || { echo "FAIL: release {{ dir }} from develop/main/master (on '$BRANCH')"; exit 1; }
+    git -C {{ dir }} rev-parse -q --verify "refs/tags/v{{ version }}" > /dev/null \
+      && { echo "FAIL: tag v{{ version }} already exists in {{ dir }}"; exit 1; } || true
+    echo "ok: {{ dir }} ready to release {{ version }}"
+
+# Central rejects a released pom whose dependencyManagement names a SNAPSHOT.
+_no-snapshot-pins dir:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    if grep -n 'SNAPSHOT' {{ dir }}/pom.xml | grep -v '<version>.*SNAPSHOT</version>.*<!-- own' | grep -q 'inventory\.'; then
+      echo "FAIL: {{ dir }}/pom.xml still pins an inventory SNAPSHOT — Central will reject the bundle"
+      grep -n 'inventory\..*SNAPSHOT' {{ dir }}/pom.xml
+      exit 1
+    fi
+    echo "ok: no inventory SNAPSHOT pins in {{ dir }}"
+
+# The one manual step between train stages.
+_portal-step dir version next:
+    @echo
+    @echo "{{ dir }} {{ version }} is STAGED, not published (autoPublish=false)."
+    @echo "  1. open https://central.sonatype.com/publishing/deployments"
+    @echo "  2. check the deployment, then Publish"
+    @echo "  3. when it shows PUBLISHED, continue with: just {{ next }}"
+    @echo
+    @echo "nothing was pushed. To push this step's release commits and tag:"
+    @echo "  git -C {{ dir }} push && git -C {{ dir }} push origin v{{ version }}"

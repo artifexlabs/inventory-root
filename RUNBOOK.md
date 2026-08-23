@@ -321,3 +321,32 @@ versioning and signing, in their own future phases.
   Nomad job (`deploy/nomad/`) and a Helm chart (`deploy/helm/inventory/`)
   translate it — both unvalidated by decision until such a cluster exists
   (see [deploy/DEPLOYMENT.md](deploy/DEPLOYMENT.md)).
+
+## Releasing the libraries (the train)
+
+`inventory-api`, `inventory-impl-root` and `inventory-bom` release
+independently of the apps (PLAN.md Phase 19). A cross-cutting change means
+five ORDERED steps, and `just` has one recipe per step:
+
+```
+just train-plan                       # read-only: pins, versions, preflight
+just train-api        0.2.0           # -> publish in the portal
+just train-impl 0.2.0 0.2.0           # -> publish in the portal
+just train-bom  0.2.0 0.2.0 0.2.0     # -> publish in the portal
+just train-apps 0.2.0                 # re-pins the four apps + clean verify
+```
+
+**Why it is not one command.** `central-publishing-maven-plugin` runs with
+`autoPublish=false`, so each step only STAGES a bundle; a human publishes it
+at https://central.sonatype.com/publishing/deployments before the next step
+can resolve it. That pause is deliberate — it is what made a mis-staged
+`inventory-api 0.1.0` droppable instead of permanent.
+
+**Before you start:** export `MAVEN_GPG_PASSPHRASE`. `maven-gpg-plugin`
+appends `--pinentry-mode error` in batch mode, so gpg may only use an
+ALREADY-CACHED passphrase, and the agent's cache expires partway through a
+build this long. `train-plan` and every step check this first.
+
+Releases run from a local machine only: CI verifies, never releases, so no
+signing key leaves the machine and nothing automated can publish
+irreversibly. Nothing in these recipes pushes.
