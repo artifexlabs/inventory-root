@@ -178,7 +178,7 @@ the public `inventory-migrate` image — nothing is mounted and no registry
 token is needed):
 
 ```sh
-git clone --recurse-submodules git@github.com:mykelalvis/inventory-root.git inventory
+git clone --recurse-submodules git@github.com:artifexlabs/inventory-root.git inventory
 cd inventory && git checkout "v${VERSION}" && git submodule update --init inventory-impl
 
 cat > .env <<'EOF'            # real secrets, never the dev defaults

@@ -3,19 +3,19 @@
 	url = git@github.com:artifexlabs/inventory-impl-root.git
 [submodule "inventory-server"]
 	path = inventory-server
-	url = git@github.com:mykelalvis/inventory-server.git
+	url = git@github.com:artifexlabs/inventory-server.git
 [submodule "inventory-web-api"]
 	path = inventory-web-api
-	url = git@github.com:mykelalvis/inventory-web-api.git
+	url = git@github.com:artifexlabs/inventory-web-api.git
 [submodule "inventory-web-app"]
 	path = inventory-web-app
-	url = git@github.com:mykelalvis/inventory-web-app.git
+	url = git@github.com:artifexlabs/inventory-web-app.git
 [submodule "inventory-mobile-apps"]
 	path = inventory-mobile-apps
-	url = git@github.com:mykelalvis/inventory-mobile-apps.git
+	url = git@github.com:artifexlabs/inventory-mobile-apps.git
 [submodule "inventory-projector"]
 	path = inventory-projector
-	url = git@github.com:mykelalvis/inventory-projector.git
+	url = git@github.com:artifexlabs/inventory-projector.git
 [submodule "inventory-parent"]
 	path = inventory-parent
 	url = git@github.com:artifexlabs/inventory-parent.git

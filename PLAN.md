@@ -126,7 +126,7 @@ should mean investing in some of this, not letting them stay a bare name+pin.
 | [inventory-impl/](inventory-impl/) | Default implementations: Postgres repositories, transactional `InventorySystem`, audit sink, Liquibase changelogs. CDI beans, minimal Quarkus coupling. |
 | [inventory-server/](inventory-server/) | **PARKED 2026-08-14** (HTTP consolidation, [VERTICLES.md](VERTICLES.md)): its REST surface, backend wiring, and OpenAPI moved into `inventory-web-api`; the module is out of the reactor and compose. History and code remain in its repo, tagged `before-remove-inventory-server`. |
 | [inventory-web-api/](inventory-web-api/) *(formerly `inventory-webapp`; artifact renamed 2026-08-07; absorbed inventory-server 2026-08-14)* | Quarkus app: **the single HTTP tier** — domain REST resources over `InventorySystem` and friends, OpenAPI, token auth, health probes, plus the `/api/v1/views/*` aggregates (page-shaped payloads, pagination, derived display fields) now composed in-process from the domain beans. Serves web and mobile clients. |
-| [inventory-mobile-apps/](inventory-mobile-apps/) *(new 2026-08-09; org `lawfulevilorg`, unlike the `mykelalvis` server-side repos)* | Umbrella submodule holding the per-platform mobile apps as nested submodules: `inventory-ios-app` (SwiftUI universal, compiling skeleton) and `inventory-android-app` (**Kotlin + Jetpack Compose** — stack decided 2026-08-09 with its compiling skeleton). Not Maven; not in the aggregator — built via `just mobile-build` (= `ios-build` + `android-build`). |
+| [inventory-mobile-apps/](inventory-mobile-apps/) *(new 2026-08-09; `lawfulevilorg` → `mykelalvis` 2026-08-10 → **`artifexlabs` 2026-08-23**, when the whole platform consolidated into one public org)* | Umbrella submodule holding the per-platform mobile apps as nested submodules: `inventory-ios-app` (SwiftUI universal, compiling skeleton) and `inventory-android-app` (**Kotlin + Jetpack Compose** — stack decided 2026-08-09 with its compiling skeleton). Not Maven; not in the aggregator — built via `just mobile-build` (= `ios-build` + `android-build`). |
 | [inventory-web-app/](inventory-web-app/) *(new 2026-08-07; directory renamed from `inventory-webapp` 2026-08-09 to match the GitHub repo)* | Quarkus app: the web UI (extracted from `inventory-web-api` in Phase 5) — Qute pages over Pico.css + design tokens, session cookie + OIDC dance, calling web-api only. Gains Svelte islands (Phase 8) for interactive surfaces. |
 | [inventory-projector/](inventory-projector/) *(new 2026-08-14 as `inventory-exporter`; renamed 2026-08-23 — nothing is exported: it PROJECTS audit facts into a derived table)* | Quarkus app (:8083): the reference event consumer (VERTICLES.md stage 5) — `ProjectionLoop` pages `audit_events.seq` from a durable cursor into its `projections` table exactly once; the bus never carries data, it only nudges the drain early. Poll-only mode is fully correct. |
 
@@ -246,7 +246,8 @@ unknown.*
   inside it.*
 - **Workflows** in [.github/workflows/](.github/workflows/):
   `devcontainer-image.yml` publishes the image to
-  `ghcr.io/mykelalvis/inventory-devcontainer:latest` on .devcontainer changes;
+  `ghcr.io/artifexlabs/inventory-root/inventory-devcontainer:latest` on .devcontainer
+  changes (the path is `${{ github.repository }}`-derived, so it followed the org move);
   `ci.yml` runs `mvn verify` for all modules inside that image (docker socket mounted
   for Testcontainers/Dev Services, ryuk disabled). Submodule checkout rewrites the SSH
   URLs in .gitmodules to HTTPS before checkout so the token flows.
@@ -298,7 +299,7 @@ high, 16 moderate, 2 low)** — all in the npm island toolchain under
 (pinned: `svelte 4.2.19`, `vite 5.4.11`, `vitest 1.6.0`, `@sveltejs/vite-plugin-svelte
 3.1.2`; `esbuild` is transitive via vite). Everything here is build/dev tooling except
 `svelte`, whose compiler output ships in the islands. Full list:
-`gh api repos/mykelalvis/inventory-web-app/dependabot/alerts`.
+`gh api repos/artifexlabs/inventory-web-app/dependabot/alerts`.
 
 - **Criticals (vitest)**: GHSA-9crc-q9x8-hgqq (RCE while the vitest API server
   listens; fixed 1.6.1) and GHSA-5xrq-8626-4rwp (arbitrary file read/execute via
@@ -1303,7 +1304,12 @@ arrives with the Apple Developer account), TestFlight/device signing.*
    *(Originally wired under `lawfulevilorg`; RELOCATED 2026-08-10 to
    `git@github.com:mykelalvis/*.git` — all branches moved, git-flow config and
    GitHub default branches preserved, .gitmodules repointed on both umbrella
-   branches, lawfulevilorg copies being removed.)* The Xcode
+   branches, lawfulevilorg copies being removed. RELOCATED AGAIN 2026-08-23 to
+   `git@github.com:artifexlabs/*.git`, this time by GitHub repo transfer rather
+   than copy — history, issues and settings carried over and the old URLs still
+   redirect. All three mobile repos are PUBLIC as of that move; the nested
+   .gitmodules is repointed and the umbrella gained the .gitignore it never
+   had.)* The Xcode
    project must build headless — `xcodebuild` with a scheme, simulator destination,
    and `CODE_SIGNING_ALLOWED=NO` for CI-shaped builds — never only from the IDE.
    *(Decided 2026-08-09: the project is generated by **XcodeGen** — `project.yml` is

@@ -1,7 +1,7 @@
 # Dual-use build container for the inventory workspace:
 #   1. Local development via Dev Containers (devcontainer.json builds this).
 #   2. Base image for GitHub Actions container jobs (published to
-#      ghcr.io/mykelalvis/inventory-devcontainer by the devcontainer-image
+#      ghcr.io/artifexlabs/inventory-root/inventory-devcontainer by the devcontainer-image
 #      workflow; ci.yml runs inside it).
 # Keep it boring: Ubuntu LTS + Temurin JDK 21 + Maven + git + docker CLI.
 # Docker itself is NOT in here — both uses talk to the host's daemon

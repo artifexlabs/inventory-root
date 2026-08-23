@@ -305,10 +305,14 @@ submodules) only if the version number is to be reused, which it normally
 should not be.
 
 The devcontainer image lives in the same namespace
-(`ghcr.io/mykelalvis/inventory-root/inventory-devcontainer:latest`) but is
-`:latest`-only — a tooling image, not a release artifact. Note: on the push
-that renamed it into the namespace, ci.yml can't pull until
-devcontainer-image.yml has published once — re-run ci after it goes green.
+(`ghcr.io/artifexlabs/inventory-root/inventory-devcontainer:latest`) but is
+`:latest`-only — a tooling image, not a release artifact. Note: the path is
+derived from `${{ github.repository }}`, so ANY rename or org transfer of the
+superproject moves it — and ci.yml cannot pull until devcontainer-image.yml has
+published at the new path at least once. Run
+`gh workflow run devcontainer-image.yml` first, then re-run ci. This bit us on
+the 2026-08-23 move to the artifexlabs org, exactly as it had on the original
+rename into the namespace.
 
 Mobile apps are deliberately NOT in this pipeline: iOS releases via
 TestFlight/App Store and Android via Play Console, each with its own

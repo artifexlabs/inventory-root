@@ -1,5 +1,8 @@
 # Publishes the dual-use build container to GHCR whenever it changes.
-# ci.yml consumes ghcr.io/mykelalvis/inventory-root/inventory-devcontainer:latest.
+# ci.yml consumes ghcr.io/artifexlabs/inventory-root/inventory-devcontainer:latest.
+# Both sides derive the path from ${{ github.repository }}, so it follows any
+# rename or org transfer — but the image must be republished at the new path
+# (workflow_dispatch) before ci.yml can pull it.
 name: devcontainer-image
 
 on:
