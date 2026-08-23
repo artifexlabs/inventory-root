@@ -658,6 +658,24 @@ train-apps bom_version:
     for d in {{ app_repos }}; do
       [ -z "$(git -C "$d" status --porcelain)" ] || { echo "FAIL: $d is dirty"; exit 1; }
     done
+    # This step COMMITS to whatever branch each app is on. The library steps
+    # gate on develop/main/master via _train-checks; without the same gate here
+    # a train can straddle — libs tagged on main, apps committed to a feature
+    # branch — and nothing would say so. Require a release branch, and require
+    # all four to agree, since "the apps" are only meaningful as one set.
+    APP_BRANCH=""
+    for d in {{ app_repos }}; do
+      B=$(git -C "$d" branch --show-current)
+      [[ "$B" == "develop" || "$B" == "main" || "$B" == "master" ]] \
+        || { echo "FAIL: $d is on '$B'; pin the apps from develop/main/master"; exit 1; }
+      if [ -z "$APP_BRANCH" ]; then APP_BRANCH="$B"; fi
+      [ "$B" == "$APP_BRANCH" ] || {
+        echo "FAIL: the apps straddle branches — $d is on '$B', an earlier repo is on '$APP_BRANCH'."
+        echo "      Put all of {{ app_repos }} on one branch before pinning."
+        exit 1
+      }
+    done
+    echo "ok: all apps on '$APP_BRANCH'"
     for d in {{ app_repos }}; do
       (cd "$d" && mvn -q versions:set-property -Dproperty=inventory.bom.version \
         -DnewVersion={{ bom_version }} -DgenerateBackupPoms=false && mvn -q tidy:pom)
@@ -690,9 +708,29 @@ _train-checks dir version:
     BRANCH=$(git -C {{ dir }} branch --show-current)
     [[ "$BRANCH" == "develop" || "$BRANCH" == "main" || "$BRANCH" == "master" ]] \
       || { echo "FAIL: release {{ dir }} from develop/main/master (on '$BRANCH')"; exit 1; }
+    # Releasing from main/master assumes the owner's cycle:
+    #   before: git checkout main && git rebase develop
+    #   after:  git checkout develop && git rebase main && git push
+    # That is only safe while main carries NO commit develop lacks, which makes
+    # the pre-release rebase a fast-forward. If main is ahead, the next
+    # `rebase develop` REPLAYS main's commits onto new SHAs — and the release
+    # tags stay behind on the originals, orphaned, while the artifacts they
+    # name are immutable on Central. Assert the invariant instead of assuming
+    # it; being ahead here means a previous cycle's rebase back to develop
+    # never happened.
+    if [[ "$BRANCH" != "develop" ]] && git -C {{ dir }} rev-parse -q --verify develop > /dev/null; then
+      AHEAD=$(git -C {{ dir }} rev-list --count "develop..$BRANCH")
+      [ "$AHEAD" -eq 0 ] || {
+        echo "FAIL: {{ dir }} '$BRANCH' is $AHEAD commit(s) ahead of develop."
+        echo "      Releasing now would orphan the v{{ version }} tag on the next rebase."
+        echo "      Fix: git -C {{ dir }} checkout develop && git rebase $BRANCH   (then retry)"
+        git -C {{ dir }} log --oneline "develop..$BRANCH"
+        exit 1
+      }
+    fi
     git -C {{ dir }} rev-parse -q --verify "refs/tags/v{{ version }}" > /dev/null \
       && { echo "FAIL: tag v{{ version }} already exists in {{ dir }}"; exit 1; } || true
-    echo "ok: {{ dir }} ready to release {{ version }}"
+    echo "ok: {{ dir }} ready to release {{ version }} from $BRANCH"
 
 # Central rejects a released pom whose dependencyManagement names a SNAPSHOT.
 _no-snapshot-pins dir:
