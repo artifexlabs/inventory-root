@@ -34,12 +34,12 @@ Configuration comes from the environment (or `.env`, which just auto-loads):
 ## Build images
 
 ```sh
-mvn -pl inventory-server,inventory-web-api,inventory-exporter -am package -DskipTests   # JVM fast-jars (bus members)
+mvn -pl inventory-server,inventory-web-api,inventory-projector -am package -DskipTests   # JVM fast-jars (bus members)
 mvn -pl inventory-web-app -am package -DskipTests -Dnative -Dquarkus.native.container-build=true
 docker compose --project-directory . -f deploy/docker-compose.yml build
 ```
 
-The three bus members (gateway, server, exporter) ship as JVM containers: the
+The three bus members (gateway, server, projector) ship as JVM containers: the
 vertx-infinispan cluster manager is the one component not yet proven under GraalVM
 native. The web-app stays native (`native` profile — since 2026-08-18 it lives
 in `io.artifexlabs:artifex-maven-parent`, the new grandparent, not
@@ -56,7 +56,7 @@ docker compose --project-directory . -f deploy/docker-compose.yml down       # s
 docker compose --project-directory . -f deploy/docker-compose.yml down -v    # stop stack, DESTROY database volume
 ```
 
-Ports: web-api (gateway) 8081, webapp 8082, exporter 8083; inventory-server has no
+Ports: web-api (gateway) 8081, webapp 8082, projector 8083; inventory-server has no
 published port (internal health only — all its work arrives over the bus fabric).
 Browser entry: http://localhost:8082
 (login with the seeded admin, default `admin@example.com` / `change-me` — override via
@@ -226,13 +226,13 @@ kinds of traffic (see [deploy/DEPLOYMENT.md](deploy/DEPLOYMENT.md) for the full 
 2. **After-commit facts** (`inventory.events.*`): unchanged publish-only
    announcements; the `audit_events` table stays the durable log of record.
 
-`inventory-exporter` (:8083) is the reference fact consumer: it pages
+`inventory-projector` (:8083) is the reference fact consumer: it pages
 `audit_events.seq` from a durable cursor and lands `item.*` / `label.print`
-facts in its `exports` table exactly once. **Poll-only mode remains fully
+facts in its `projections` table exactly once. **Poll-only mode remains fully
 correct** for consumers; cluster membership is their latency upgrade. The
 gateway, in contrast, REQUIRES the fabric — no workers, no API.
 
-- The three bus members (gateway .11, server .12, exporter .13) hold static IPs
+- The three bus members (gateway .11, server .12, projector .13) hold static IPs
   on the internal-only `cluster` network (172.28.0.0/24): static addressing pins
   JGroups membership (:7800), TCPPING discovery, and the separate Vert.x
   event-bus message transport (:15701, whose localhost default silently drops
@@ -245,14 +245,14 @@ gateway, in contrast, REQUIRES the fabric — no workers, no API.
   `jgroups.tcpping.initial_hosts` lists all three static IPs and that every
   member sits on the `cluster` network. During a partition: gateway requests
   fail 503 (nothing is silently dropped — request/reply has no store-and-forward);
-  facts are NOT lost — the exporter's reconciliation poll sweeps the table.
+  facts are NOT lost — the projector's reconciliation poll sweeps the table.
 - **Consumer recovery is trivial by design**: a consumer is just a cursor. Wipe
   or reset its `consumer_cursors` row and it replays idempotently from wherever
   you point it (`seq = 0` = full history).
 - Config: `inventory.bus.workers` = `embedded` (single-process dev/test) |
   `remote` (deployment); `inventory.bus.token` (shared fabric token);
-  `inventory.events.bus` = `none` (default) | `local` | `clustered`; exporter
-  poll interval `inventory.exporter.poll-interval-ms`.
+  `inventory.events.bus` = `none` (default) | `local` | `clustered`; projector
+  poll interval `inventory.projector.poll-interval-ms`.
 
 ## Formal releases (Phase 14)
 
@@ -281,7 +281,7 @@ git submodule foreach 'git push origin v1.2.0'      # mirror tags
 reactor at `-Drevision=1.2.0` (full verify), native-images
 inventory-web-app, and pushes `artifexlabs/<module>:1.2.0` (+`:latest`) to
 PUBLIC Docker Hub (decided 2026-08-21; formerly private GHCR) for
-inventory-server, inventory-web-api, inventory-exporter (JVM images — the
+inventory-server, inventory-web-api, inventory-projector (JVM images — the
 cluster manager is not yet proven under native) and inventory-web-app
 (native). It ends by drafting a GitHub Release with the run-this-version
 snippet. Images may be built from unreleased Maven artifacts — images are

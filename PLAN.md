@@ -128,6 +128,7 @@ should mean investing in some of this, not letting them stay a bare name+pin.
 | [inventory-web-api/](inventory-web-api/) *(formerly `inventory-webapp`; artifact renamed 2026-08-07; absorbed inventory-server 2026-08-14)* | Quarkus app: **the single HTTP tier** — domain REST resources over `InventorySystem` and friends, OpenAPI, token auth, health probes, plus the `/api/v1/views/*` aggregates (page-shaped payloads, pagination, derived display fields) now composed in-process from the domain beans. Serves web and mobile clients. |
 | [inventory-mobile-apps/](inventory-mobile-apps/) *(new 2026-08-09; org `lawfulevilorg`, unlike the `mykelalvis` server-side repos)* | Umbrella submodule holding the per-platform mobile apps as nested submodules: `inventory-ios-app` (SwiftUI universal, compiling skeleton) and `inventory-android-app` (**Kotlin + Jetpack Compose** — stack decided 2026-08-09 with its compiling skeleton). Not Maven; not in the aggregator — built via `just mobile-build` (= `ios-build` + `android-build`). |
 | [inventory-web-app/](inventory-web-app/) *(new 2026-08-07; directory renamed from `inventory-webapp` 2026-08-09 to match the GitHub repo)* | Quarkus app: the web UI (extracted from `inventory-web-api` in Phase 5) — Qute pages over Pico.css + design tokens, session cookie + OIDC dance, calling web-api only. Gains Svelte islands (Phase 8) for interactive surfaces. |
+| [inventory-projector/](inventory-projector/) *(new 2026-08-14 as `inventory-exporter`; renamed 2026-08-23 — nothing is exported: it PROJECTS audit facts into a derived table)* | Quarkus app (:8083): the reference event consumer (VERTICLES.md stage 5) — `ProjectionLoop` pages `audit_events.seq` from a durable cursor into its `projections` table exactly once; the bus never carries data, it only nudges the drain early. Poll-only mode is fully correct. |
 
 ## Roadmap
 
@@ -369,12 +370,12 @@ rather than an emergency patch.
 ### Phase 14 — Formal releases: tag-driven images to private GHCR *(thirteenth milestone — detail below; added 2026-08-14; EXECUTED 2026-08-15)*
 - One `vX.Y.Z` tag on the superproject releases the whole platform: CI builds the
   reactor at that version, publishes native images for `inventory-web-api`,
-  `inventory-web-app`, and `inventory-exporter` to **private GHCR under
+  `inventory-web-app`, and `inventory-projector` to **private GHCR under
   `ghcr.io/<owner>/inventory-root/<module>:<version>`**, and mirrors the tag into
   every submodule repo. No Maven artifact publishing — images are the deliverable
   (see the decision row). *(As built: FOUR images, matching what compose deploys
   post-`migrate_to_vertx_eb` — JVM images for the three bus members
-  inventory-server/web-api/exporter, native for inventory-web-app.)*
+  inventory-server/web-api/projector, native for inventory-web-app.)*
 - **Mobile is explicitly separate.** iOS releases via the store track (Xcode archive
   → TestFlight → App Store; `MARKETING_VERSION`; signing; needs the Phase 11 Apple
   Developer account) and Android, when it exists, via its own (Play Console, signed
@@ -1463,7 +1464,7 @@ needs the jars; GitHub Packages is the answer then).
 ## Fourteenth milestone (Phase 15: unified containment + item enrichment) — EXECUTED 2026-08-15
 
 *Added 2026-08-15 on owner decision. Executed the same day on branch
-`unified_containment_b4_v1` across api/impl/server/web-api/web-app/exporter
+`unified_containment_b4_v1` across api/impl/server/web-api/web-app/projector
 (mobile follows once contracts settle). All gates met: full reactor green (193
 tests); re-parent-not-multiply and cycle-refusal proven in memory, Postgres
 (recursive CTE), the HTTP surface, and the web-app stub; coordinate inheritance

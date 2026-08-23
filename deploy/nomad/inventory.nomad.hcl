@@ -12,7 +12,7 @@
 # multi-node Nomad target exists.
 #
 # SECURITY invariant preserved: only 8081 (API), 8082 (web UI), and 8083
-# (exporter) are published; JGroups 7800-7802 and bus 15701-15703 stay inside
+# (projector) are published; JGroups 7800-7802 and bus 15701-15703 stay inside
 # the allocation's network namespace. Bus membership is access.
 #
 # Images are the released PUBLIC Docker Hub images (docker.io/artifexlabs,
@@ -78,7 +78,7 @@ job "inventory" {
         static = 8082
         to     = 8082
       }
-      port "exporter" {
+      port "projector" {
         static = 8083
         to     = 8083
       }
@@ -222,12 +222,12 @@ job "inventory" {
 
     # Reference fact consumer, :8083. Poll-only is fully correct; cluster
     # membership is its latency upgrade.
-    task "inventory-exporter" {
+    task "inventory-projector" {
       driver = "docker"
 
       config {
-        image = "${var.image_namespace}/inventory-exporter:${var.version}"
-        ports = ["exporter"]
+        image = "${var.image_namespace}/inventory-projector:${var.version}"
+        ports = ["projector"]
       }
 
       env {

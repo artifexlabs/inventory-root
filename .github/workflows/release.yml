@@ -93,7 +93,7 @@ jobs:
           }
           build_push inventory-server    Dockerfile.jvm
           build_push inventory-web-api   Dockerfile.jvm
-          build_push inventory-exporter  Dockerfile.jvm
+          build_push inventory-projector  Dockerfile.jvm
           build_push inventory-web-app   Dockerfile.native
           # the versioned schema (Liquibase + changeset jar on the classpath)
           docker build \
@@ -114,7 +114,7 @@ jobs:
           \`\`\`
           artifexlabs/inventory-server:${VERSION}
           artifexlabs/inventory-web-api:${VERSION}
-          artifexlabs/inventory-exporter:${VERSION}
+          artifexlabs/inventory-projector:${VERSION}
           artifexlabs/inventory-web-app:${VERSION}
           artifexlabs/inventory-migrate:${VERSION}
           \`\`\`

@@ -136,13 +136,13 @@ native module: _sync-libs
     @echo "-> delegating to Maven: native build of {{ module }} ({{ native_flags }})"
     mvn -pl {{ module }} -am clean package {{ native_flags }}
 
-# JVM fast-jars for the bus members (gateway, server, exporter): the
+# JVM fast-jars for the bus members (gateway, server, projector): the
 # vertx-infinispan cluster manager is not yet proven under GraalVM native,
 # so cluster members ship as JVM containers.
 [group('build')]
 fastjars: _sync-libs
     @echo "-> delegating to Maven: fast-jars for the bus members"
-    {{ test_env }} mvn -pl inventory-server,inventory-web-api,inventory-exporter -am clean package -DskipTests
+    {{ test_env }} mvn -pl inventory-server,inventory-web-api,inventory-projector -am clean package -DskipTests
 
 # Native executables (web-app only in the deployed stack).
 [group('build')]
@@ -517,7 +517,7 @@ release-plan version:
     @echo "  2. annotated tag v{{ version }} on the superproject (HEAD)"
     @git submodule status | awk '{ sub(/^[+-]?/, "", $1); printf "  3. tag v{{ version }} in %s at recorded %s\n", $2, substr($1, 1, 12) }'
     @echo "  4. NOTHING pushes. Pushing the superproject tag triggers release.yml,"
-    @echo "     which publishes PUBLIC images to docker.io/artifexlabs/{inventory-server,inventory-web-api,inventory-exporter,inventory-web-app}:{{ version }}"
+    @echo "     which publishes PUBLIC images to docker.io/artifexlabs/{inventory-server,inventory-web-api,inventory-projector,inventory-web-app}:{{ version }}"
 
 # Cut a release LOCALLY: verify the reactor at the release version, then tag
 # the superproject and mirror the tag into every submodule at its recorded
@@ -579,7 +579,7 @@ _release-tags version:
 # machine and nothing automated can trigger an irreversible publish.
 
 lib_repos := "inventory-api inventory-impl-root inventory-bom"
-app_repos := "inventory-web-api inventory-web-app inventory-server inventory-exporter"
+app_repos := "inventory-web-api inventory-web-app inventory-server inventory-projector"
 
 # What the train would do: current pins, local versions, and preflight state.
 [group('release-train')]

@@ -38,7 +38,7 @@ iOS app ──HTTP──▶ inventory-web-api (:8081, JVM)     ◀── the ONL
                   clustered Vert.x event bus  (internal network, fabric token)
                        │                                        │
                        ▼                                        ▼
-              inventory-server (JVM)                inventory-exporter (:8083, JVM)
+              inventory-server (JVM)                inventory-projector (:8083, JVM)
               worker verticles: CRUD,               consumes inventory.events.* facts
               audit, QR/label, users,               + polls audit_events.seq (always
               tokens, auth                          correct even with no bus)
@@ -120,8 +120,8 @@ the smoke flow against :8081. This is the setup for debugging fabric behavior
 ### 3. Full dev stack (compose — the deployment rehearsal)
 
 ```sh
-just build-all            # fast-jars (server, gateway, exporter) + native web-app + docker compose build
-just up                   # postgres → migrate (Liquibase, exits 0) → server → gateway/exporter → web-app
+just build-all            # fast-jars (server, gateway, projector) + native web-app + docker compose build
+just up                   # postgres → migrate (Liquibase, exits 0) → server → gateway/projector → web-app
 just ps                   # everything Up; migrate Exited (0)
 just smoke                # login → CRUD → QR → print-label → BFF view; ends SMOKE PASS
 just down                 # stop, KEEP data       (just destroy = confirm-gated down -v)
@@ -129,7 +129,7 @@ just down                 # stop, KEEP data       (just destroy = confirm-gated 
 
 This is the same `deploy/docker-compose.yml` a release runs — Postgres storage, the
 internal cluster network with static member IPs (gateway 172.28.0.11, server
-.12, exporter .13), and the fabric token from `.env`. Verification beyond smoke:
+.12, projector .13), and the fabric token from `.env`. Verification beyond smoke:
 
 ```sh
 just logs inventory-server | grep ISPN000094    # cluster view should reach (3)
@@ -160,7 +160,7 @@ just verify
 just build-all
 
 # 3. Tag and push into the public artifexlabs namespace (docker login first)
-for m in inventory-server inventory-web-api inventory-exporter; do
+for m in inventory-server inventory-web-api inventory-projector; do
   docker tag  ${m}:jvm  ${NS}/${m}:${VERSION}
   docker push ${NS}/${m}:${VERSION}
 done
@@ -219,7 +219,7 @@ docker compose --project-directory . -f deploy/docker-compose.yml -f deploy/dock
   or 15701 (bus transport). Bus membership is access.
 - `INVENTORY_BUS_TOKEN` is defense in depth inside the fabric, not the
   perimeter — rotate it by redeploying gateway and server together.
-- Only :8081 (API), :8082 (web UI), and :8083 (exporter, optional) are ever
+- Only :8081 (API), :8082 (web UI), and :8083 (projector, optional) are ever
   published; inventory-server exposes nothing.
 - The seeded admin credentials and the memory-mode `dev-token` are dev
   conveniences; released deploys must override them in `.env`.

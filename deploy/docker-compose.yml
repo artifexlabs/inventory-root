@@ -4,7 +4,7 @@
 # Topology (migrate_to_vertx_eb): inventory-web-api is the authenticated HTTP
 # gateway; ALL domain work crosses the clustered Vert.x event bus as envelopes
 # answered by inventory-server's workers (CRUD, audit, QR/label, users,
-# tokens, auth). The three bus members (gateway, server, exporter) run as JVM
+# tokens, auth). The three bus members (gateway, server, projector) run as JVM
 # containers — the vertx-infinispan cluster manager is the one component not
 # yet proven under GraalVM native; the web-app stays native.
 #
@@ -84,7 +84,7 @@ services:
       INVENTORY_BUS_TOKEN: ${INVENTORY_BUS_TOKEN:-dev-bus-token}
       INVENTORY_ADMIN_EMAIL: ${INVENTORY_ADMIN_EMAIL:-admin@example.com}
       INVENTORY_ADMIN_PASSWORD: ${INVENTORY_ADMIN_PASSWORD:-change-me}
-      # after-commit domain facts keep flowing to consumers (exporter)
+      # after-commit domain facts keep flowing to consumers (projector)
       INVENTORY_EVENTS_BUS: clustered
       # Label printer (Phase 9): defaults to the log printer; .env selects
       # hardware. Formats are the shared semantic names (LabelPrinter):
@@ -145,11 +145,11 @@ services:
   # Reference event consumer (VERTICLES.md stage 5): polls the audit_events
   # cursor — fully correct on its own; cluster membership upgrades it to
   # sub-second push via the after-commit facts the server publishes.
-  inventory-exporter:
+  inventory-projector:
     build:
-      context: inventory-exporter
+      context: inventory-projector
       dockerfile: src/main/docker/Dockerfile.jvm
-    image: inventory-exporter:jvm
+    image: inventory-projector:jvm
     environment:
       QUARKUS_DATASOURCE_REACTIVE_URL: postgresql://postgres:5432/inventory
       QUARKUS_DATASOURCE_USERNAME: inventory

@@ -13,9 +13,9 @@
 [submodule "inventory-mobile-apps"]
 	path = inventory-mobile-apps
 	url = git@github.com:mykelalvis/inventory-mobile-apps.git
-[submodule "inventory-exporter"]
-	path = inventory-exporter
-	url = git@github.com:mykelalvis/inventory-exporter.git
+[submodule "inventory-projector"]
+	path = inventory-projector
+	url = git@github.com:mykelalvis/inventory-projector.git
 [submodule "inventory-parent"]
 	path = inventory-parent
 	url = git@github.com:artifexlabs/inventory-parent.git

@@ -19,8 +19,8 @@ services:
   inventory-web-api:
     image: docker.io/artifexlabs/inventory-web-api:${INVENTORY_VERSION:-latest}
 
-  inventory-exporter:
-    image: docker.io/artifexlabs/inventory-exporter:${INVENTORY_VERSION:-latest}
+  inventory-projector:
+    image: docker.io/artifexlabs/inventory-projector:${INVENTORY_VERSION:-latest}
 
   inventory-web-app:
     image: docker.io/artifexlabs/inventory-web-app:${INVENTORY_VERSION:-latest}

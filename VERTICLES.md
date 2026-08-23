@@ -296,9 +296,11 @@ mandatory (no workers, no API), while `inventory.events.bus` still defaults to
    the domain beans moved back into it; web-api kept the REST surface and became the
    authenticated gateway, retaining its own producer copy solely for embedded
    (single-process dev/test) mode.
-5. **Reference consumer: `inventory-exporter`** — **EXECUTED 2026-08-14.** New
-   module/repo (:8083): `ExportLoop` drains `audit_events.seq` from a durable
-   cursor; `item.*`/`label.print` land in `exports` exactly once (event-id PK);
+5. **Reference consumer: `inventory-projector`** — **EXECUTED 2026-08-14** *(as
+   `inventory-exporter`; renamed 2026-08-23 — it projects the audit log into a
+   derived table, nothing leaves the system)*. New module/repo (:8083):
+   `ProjectionLoop` drains `audit_events.seq` from a durable cursor;
+   `item.*`/`label.print` land in `projections` exactly once (event-id PK);
    cursor advances in the same transaction as its batch; the bus only nudges the
    drain — data always comes from the table. In base compose it runs poll-only
    (fully correct, no cluster). *Gate met: kill-and-restart drill test.*
@@ -311,11 +313,11 @@ mandatory (no workers, no API), while `inventory.events.bus` still defaults to
    (`quarkus.vertx.cluster.host`/`:15701` — a separate socket whose localhost
    default silently drops every remote delivery). Bus members run as JVM containers
    (the documented native fallback). *Gate met: 2-node view forms; create→export in
-   329 ms against a 30 s poll interval; exporter killed mid-stream missed nothing
+   329 ms against a 30 s poll interval; projector killed mid-stream missed nothing
    (recovered at the first tick, exactly once).*
    **REVISED same day:** with the bus mandatory rather than opt-in, the overlay was
    merged into `docker-compose.yml` and deleted — the base stack now runs a
-   three-member cluster (gateway .11, server .12, exporter .13) on the same
+   three-member cluster (gateway .11, server .12, projector .13) on the same
    internal-only static-IP network. `docker-compose.release.yml` (versioned
    images — public Docker Hub `artifexlabs` since 2026-08-21) is the only overlay
    today; see [deploy/DEPLOYMENT.md](deploy/DEPLOYMENT.md).
@@ -324,7 +326,7 @@ mandatory (no workers, no API), while `inventory.events.bus` still defaults to
    overlay — runs inside plain `mvn verify`, so CI exercises the clustered fabric
    on every build. RUNBOOK gains the events/cluster section: ports, split-brain
    symptoms, "a consumer is just a cursor" recovery. NOTE for the eventual push:
-   `inventory-exporter` must be added to the `SUBMODULE_TOKEN` fine-grained PAT's
+   `inventory-projector` must be added to the `SUBMODULE_TOKEN` fine-grained PAT's
    repository list or CI checkout will fail. *(Resolved: the repos are public and
    CI checks everything out with the default token.)*
 
@@ -336,7 +338,7 @@ mandatory (no workers, no API), while `inventory.events.bus` still defaults to
 - **The audit vocabulary becomes a public contract.** Action names and `details`
   shapes need the `v`-field discipline once a consumer exists.
 - **Idempotency is a contract, not a mechanism** — stated in the events package
-  javadoc, enforced in the exporter's tests.
+  javadoc, enforced in the projector's tests.
 - **Memory mode never supports cross-process consumers** (per-JVM state, no durable
   log) — pg mode only, matching the existing constraint.
 - ~~**Consolidation ripples**~~ — swept twice (stage 4, then the revision): PLAN.md,

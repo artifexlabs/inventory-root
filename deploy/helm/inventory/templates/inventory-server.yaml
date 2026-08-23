@@ -106,7 +106,7 @@ spec:
             - name: JAVA_TOOL_OPTIONS
               value: >-
                 -Djgroups.bind.address=$(POD_IP)
-                -Djgroups.tcpping.initial_hosts=inventory-server[7800],inventory-web-api-bus[7800],inventory-exporter-bus[7800]
+                -Djgroups.tcpping.initial_hosts=inventory-server[7800],inventory-web-api-bus[7800],inventory-projector-bus[7800]
                 -Djava.net.preferIPv4Stack=true
           ports:
             - name: health

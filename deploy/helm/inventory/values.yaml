@@ -38,7 +38,7 @@ webApp:
 webApi:
   serviceType: ClusterIP
 
-exporter:
+projector:
   serviceType: ClusterIP
 
 ingress:
