@@ -37,15 +37,15 @@ jobs:
       # (which injects the token) sees HTTPS URLs.
       - name: Rewrite SSH GitHub URLs to HTTPS
         run: git config --global url."https://github.com/".insteadOf "git@github.com:"
-      # GITHUB_TOKEN is scoped to this repo only; the submodules are private
-      # sibling repos, so cloning them needs SUBMODULE_TOKEN — a fine-grained
-      # PAT with contents:read on the inventory-* repos. NOTE (2026-08-19):
-      # inventory-parent/api/impl moved to the artifexlabs org, so the PAT
-      # must grant contents:read there too, or their checkout fails.
+      # Every inventory-* repo is public under the artifexlabs org (2026-08-23),
+      # so the default GITHUB_TOKEN clones them all. This previously needed
+      # SUBMODULE_TOKEN — a fine-grained PAT with contents:read — because the
+      # siblings were private and GITHUB_TOKEN reaches only this repo. Going
+      # public retired that PAT along with the chore of adding every new repo
+      # to its allowlist, which had already broken checkout twice.
       - uses: actions/checkout@v5
         with:
           submodules: recursive
-          token: ${{ secrets.SUBMODULE_TOKEN || github.token }}
       # The lib submodules are NOT reactor modules (PLAN.md Phase 19): build
       # and install them in dependency order, then the app reactor consumes
       # them from the local repository. artifex-maven-parent resolves from

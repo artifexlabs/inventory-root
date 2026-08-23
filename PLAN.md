@@ -268,10 +268,14 @@ unknown.*
 - **CI blocker #2 — private-submodule checkout, RESOLVED 2026-08-13**: with the
   parent resolvable, CI surfaced the next failure: all `inventory-*` repos are
   private, and the workflow's `GITHUB_TOKEN` only reaches `inventory-root`, so
-  every submodule clone got "repository not found". Fix: `ci.yml` passes
+  every submodule clone got "repository not found". Fix: `ci.yml` passed
   `token: ${{ secrets.SUBMODULE_TOKEN || github.token }}` to `actions/checkout`;
-  `SUBMODULE_TOKEN` is a fine-grained PAT (contents:read on the `inventory-*`
-  repos) stored as a repo secret on `inventory-root`.
+  `SUBMODULE_TOKEN` was a fine-grained PAT (contents:read on the `inventory-*`
+  repos) stored as a repo secret on `inventory-root`. *(RETIRED 2026-08-23: every
+  repo is public under `artifexlabs`, so the default `GITHUB_TOKEN` clones them
+  all. The PAT's allowlist had to be extended by hand for each new or moved repo
+  and broke checkout twice by being forgotten — going public removed the whole
+  class of failure, not just the secret.)*
 - **Phase 10 gate PASSED 2026-08-13**: first fully green `ci.yml` run
   (31711062159, 5m06s) — GHCR devcontainer image pull, private-submodule checkout,
   and the full six-module `mvn verify` with Testcontainers all work on GitHub.
@@ -1426,7 +1430,8 @@ SNAPSHOT forever.*
    *Gate: full `mvn verify` green both bare and with `-Drevision` set; flattened
    poms show the resolved version.*
 2. **Release workflow.** `release.yml` in the superproject, triggered by tags
-   matching `v*`: recursive checkout (SUBMODULE_TOKEN), build the reactor at
+   matching `v*`: recursive checkout (SUBMODULE_TOKEN then; the default
+   `GITHUB_TOKEN` since the repos went public 2026-08-23), build the reactor at
    `-Drevision=${tag#v}`, native-image the three apps
    (`-Dnative -Dquarkus.native.container-build=true`), `docker build` each
    `Dockerfile.native`, push to `ghcr.io/<owner>/inventory-root/<module>:<version>`
@@ -1439,7 +1444,8 @@ SNAPSHOT forever.*
    three private packages under the inventory-root namespace and a green run.*
 3. **Submodule tag mirroring.** The release ceremony (not CI) tags each submodule
    repo with the same `vX.Y.Z` at the SHA the superproject records — locally, so
-   SUBMODULE_TOKEN stays read-only. *Gate: after a release, `git tag --contains`
+   CI's checkout credential stays read-only (it was SUBMODULE_TOKEN; it is now
+   the default `GITHUB_TOKEN`). *Gate: after a release, `git tag --contains`
    in any submodule finds the version at the recorded pointer.*
 4. **`just release <version>`.** The one command: refuses on a dirty tree or off
    `develop`/`master`, runs the full verify, optionally drives the git-flow

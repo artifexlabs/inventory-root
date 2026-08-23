@@ -327,8 +327,10 @@ mandatory (no workers, no API), while `inventory.events.bus` still defaults to
    on every build. RUNBOOK gains the events/cluster section: ports, split-brain
    symptoms, "a consumer is just a cursor" recovery. NOTE for the eventual push:
    `inventory-projector` must be added to the `SUBMODULE_TOKEN` fine-grained PAT's
-   repository list or CI checkout will fail. *(Resolved: the repos are public and
-   CI checks everything out with the default token.)*
+   repository list or CI checkout will fail. *(Resolved 2026-08-23: every repo is
+   public under `artifexlabs`, CI checks everything out with the default
+   `GITHUB_TOKEN`, and `SUBMODULE_TOKEN` is retired — so there is no allowlist to
+   forget when the next repo appears.)*
 
 ## Risks and open unknowns
 

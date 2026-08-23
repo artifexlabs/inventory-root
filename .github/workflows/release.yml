@@ -31,10 +31,12 @@ jobs:
     steps:
       - name: Rewrite SSH GitHub URLs to HTTPS
         run: git config --global url."https://github.com/".insteadOf "git@github.com:"
+      # Public sibling repos: the default GITHUB_TOKEN is enough (SUBMODULE_TOKEN
+      # retired 2026-08-23). Checkout is read-only here; submodule tags are
+      # mirrored locally by the release ceremony, never by CI.
       - uses: actions/checkout@v5
         with:
           submodules: recursive
-          token: ${{ secrets.SUBMODULE_TOKEN || github.token }}
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
