@@ -1404,13 +1404,13 @@ SNAPSHOT forever.*
   only in the job container, not on the host — the workflow installs
   Maven 3.9.16 (dlcdn + archive fallback) and a JDK-21 toolchains.xml
   instead. It ends by drafting a GitHub Release with the overlay snippet.*
-- *`just release <version>`: preconditions (semver, develop/master, clean tree
+- *`just release <version>`: preconditions (semver, develop/main, clean tree
   including submodule pointers, tag free everywhere) → full verify at
   `-Drevision` → annotated `v<version>` on the superproject + mirrored into
   every top-level submodule at its RECORDED SHA — locally; the recipe ends by
   printing exactly what to push. `just release-plan <version>` is the dry-run.
   Deviation: no git-flow ceremony automation — the recipe tags the current
-  develop/master HEAD; run the flow branching manually if wanted.*
+  develop/main HEAD; run the flow branching manually if wanted.*
 - *Compose overlay (`docker-compose.release.yml`) predated this execution;
   devcontainer image renamed into the namespace (both workflows; ci.yml notes
   the one-time re-run after the rename lands); RUNBOOK gained "Formal
@@ -1448,7 +1448,7 @@ SNAPSHOT forever.*
    the default `GITHUB_TOKEN`). *Gate: after a release, `git tag --contains`
    in any submodule finds the version at the recorded pointer.*
 4. **`just release <version>`.** The one command: refuses on a dirty tree or off
-   `develop`/`master`, runs the full verify, optionally drives the git-flow
+   `develop`/`main`, runs the full verify, optionally drives the git-flow
    release-branch ceremony (`git flow release start/finish`), creates the
    superproject tag + mirrored submodule tags, and prints exactly what to push
    (nothing pushes without the user's say — house rule). *Gate: dry-run mode shows

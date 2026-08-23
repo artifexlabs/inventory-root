@@ -531,15 +531,15 @@ release version:
       mvn -B verify -Drevision={{ version }}
     @just _release-tags {{ version }}
 
-# Preconditions: clean tree, on develop/master, tag not already taken anywhere.
+# Preconditions: clean tree, on develop/main, tag not already taken anywhere.
 _release-checks version:
     #!/usr/bin/env bash
     set -euo pipefail
     [[ "{{ version }}" =~ ^[0-9]+\.[0-9]+\.[0-9]+([-.].+)?$ ]] \
       || { echo "FAIL: '{{ version }}' is not a semver version (expected X.Y.Z, no leading v)"; exit 1; }
     BRANCH=$(git rev-parse --abbrev-ref HEAD)
-    [[ "$BRANCH" == "develop" || "$BRANCH" == "master" ]] \
-      || { echo "FAIL: releases cut from develop or master only (on '$BRANCH')"; exit 1; }
+    [[ "$BRANCH" == "develop" || "$BRANCH" == "main" ]] \
+      || { echo "FAIL: releases cut from develop or main only (on '$BRANCH')"; exit 1; }
     [ -z "$(git status --porcelain)" ] \
       || { echo "FAIL: working tree is dirty (submodule pointers count)"; git status --short; exit 1; }
     git submodule status | grep -q '^[+-]' \
@@ -659,15 +659,15 @@ train-apps bom_version:
       [ -z "$(git -C "$d" status --porcelain)" ] || { echo "FAIL: $d is dirty"; exit 1; }
     done
     # This step COMMITS to whatever branch each app is on. The library steps
-    # gate on develop/main/master via _train-checks; without the same gate here
+    # gate on develop/main via _train-checks; without the same gate here
     # a train can straddle — libs tagged on main, apps committed to a feature
     # branch — and nothing would say so. Require a release branch, and require
     # all four to agree, since "the apps" are only meaningful as one set.
     APP_BRANCH=""
     for d in {{ app_repos }}; do
       B=$(git -C "$d" branch --show-current)
-      [[ "$B" == "develop" || "$B" == "main" || "$B" == "master" ]] \
-        || { echo "FAIL: $d is on '$B'; pin the apps from develop/main/master"; exit 1; }
+      [[ "$B" == "develop" || "$B" == "main" ]] \
+        || { echo "FAIL: $d is on '$B'; pin the apps from develop/main"; exit 1; }
       if [ -z "$APP_BRANCH" ]; then APP_BRANCH="$B"; fi
       [ "$B" == "$APP_BRANCH" ] || {
         echo "FAIL: the apps straddle branches — $d is on '$B', an earlier repo is on '$APP_BRANCH'."
@@ -706,9 +706,9 @@ _train-checks dir version:
     [ -z "$(git -C {{ dir }} status --porcelain)" ] \
       || { echo "FAIL: {{ dir }} has uncommitted changes"; git -C {{ dir }} status --short; exit 1; }
     BRANCH=$(git -C {{ dir }} branch --show-current)
-    [[ "$BRANCH" == "develop" || "$BRANCH" == "main" || "$BRANCH" == "master" ]] \
-      || { echo "FAIL: release {{ dir }} from develop/main/master (on '$BRANCH')"; exit 1; }
-    # Releasing from main/master assumes the owner's cycle:
+    [[ "$BRANCH" == "develop" || "$BRANCH" == "main" ]] \
+      || { echo "FAIL: release {{ dir }} from develop/main (on '$BRANCH')"; exit 1; }
+    # Releasing from main assumes the owner's cycle:
     #   before: git checkout main && git rebase develop
     #   after:  git checkout develop && git rebase main && git push
     # That is only safe while main carries NO commit develop lacks, which makes

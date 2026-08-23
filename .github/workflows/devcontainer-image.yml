@@ -7,7 +7,7 @@ name: devcontainer-image
 
 on:
   push:
-    branches: [develop, master]
+    branches: [develop, main]
     paths: ['.devcontainer/**', '.github/workflows/devcontainer-image.yml']
   workflow_dispatch:
 

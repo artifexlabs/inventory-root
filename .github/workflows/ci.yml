@@ -13,7 +13,7 @@ name: ci
 
 on:
   push:
-    branches: [develop, master, 'feature/**']
+    branches: [develop, main, 'feature/**']
   pull_request:
   workflow_dispatch:
 
