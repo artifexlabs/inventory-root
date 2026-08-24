@@ -2108,13 +2108,37 @@ free. Item 4 is standalone.
       hardware print only on explicit instruction. *Sibling: 15 (2x-large) —
       implement together; they share the wider-stock order and the new
       geometry work.*
+      **MECHANICAL TEST PASSED 2026-08-24** *(owed and paid the same day — 4x4
+      stock was loaded within the hour; ~JC measured an 842-dot pitch = a 3.98
+      in label, matching the 812-dot layout and incidentally confirming the
+      printer's original 846 reading had been this same stock; label accepted
+      by the owner on inspection)*:
+      the owner examined already-printed x-large labels and found the text
+      touching the left edge, the same defect the first 4x6.5 print exposed.
+      Both 812-dot-wide die-cut layouts now inset text by `WIDE_MARGIN` (15
+      dots = the shared `MARGIN` of 4 plus 4 typographic points at 203 dpi)
+      instead of `MARGIN`; the narrow Brother tape layouts keep `MARGIN`,
+      where 11 more dots would eat 9% of a 128-dot label. Verified on the
+      bitmaps — leftmost ink moved 5 -> 16 on x-large and 4 -> 15 on
+      2x-large, rightmost stayed well inside 812 — and both goldens were
+      regenerated in the Linux devcontainer, since golden rendering is pinned
+      to DejaVu and the assertions SKIP on macOS. But 2x-large is what is
+      physically loaded, so the x-large fix has been proven only in pixels.
+      Printed and inspected: accepted.
 - [x] **15. "2x-large" Zebra label format** *(added 2026-08-15; measured size
       corrected 4×6→**4×6.5** same day; CODE + GOLDENS DONE same day with 14:
       `compose2xLarge` 812×1320, QR 3 in, adds own-coordinates "@ lat, long"
       (deliberately NOT effective/inherited — the location line already names
       the container chain), sorted rendered tags wrapped to 3 lines, and the
       description wrapped to 6; golden `golden-2x-large-812x1320.png` pinned.
-      AWAITING HARDWARE SMOKE with 14)* - the fourth named
+      HARDWARE SMOKE PASSED 2026-08-24 on real 4x6.5 stock — see the margin
+      note under 14; the printer's own ~JC calibration measured a 1360-dot
+      pitch (6.70 in), which minus the ~34-dot gap confirms the 4x6.5 reading
+      and vindicates the same-day 4x6 -> 4x6.5 correction below. Printer
+      settings corrected and saved with ^JUS: PRINT WIDTH 457 -> 812, LABEL
+      LENGTH 846 -> 1360. NOTE the smoke printed the pinned golden, whose QR
+      is a deterministic CHECKERBOARD stand-in, so QR SCANNABILITY at 3 in on
+      this stock is still UNPROVEN — do that on the next 4x6.5 print)* - the fourth named
       format: **4×6.5 in (~813×1320 dots)**, shipping-label size — everything
       x-large carries plus the rest of what the item knows: coordinates, tags,
       wrapped description, printed-on date, with the QR pushed toward ~3 in.
