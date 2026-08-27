@@ -81,8 +81,8 @@ The central design fact, and the one most easily got wrong: **the three hashes
 differ in when they can exist.**
 
 ```
-                                       -- a FILE contributes only its name here
-structure(f) = H( "blob" ‖ len(name)‖name )
+                            -- decision 2: a FILE contributes its name AND size
+structure(f) = H( "blob" ‖ len(name)‖name ‖ size_be64 )
 structure(D) = H( "tree" ‖ sorted[ structure(c) for c in children ] )
 
 content(f)   = the file's content digest                        -- reads every byte
@@ -118,8 +118,12 @@ avoids the trap.
 - **Length-prefix every variable-length field.** `H(a‖b)` is ambiguous otherwise:
   `("ab","c")` and `("a","bc")` would collide. Prefix each name with its byte
   length.
-- **Deterministic order.** Sort children by raw NAME BYTES (not locale collation,
-  not normalized Unicode). Locale-dependent sorting makes hashes machine-dependent.
+- **Deterministic order.** Sort children by their own HASH BYTES, unsigned. The
+  name is already inside each child's digest, so sorting by hash is equivalent to
+  sorting by name in discriminating power and simpler to implement — a parent only
+  ever holds its children's hashes, never their names. What matters is that the
+  order never depends on locale collation or Unicode normalization, which would
+  make the same tree hash differently on two machines.
 - **Empty directories must be representable.** A file-only manifest cannot express
   them, so two trees differing only by an empty directory collide. If directories
   become rows, record empty ones.
