@@ -972,6 +972,66 @@ restore release pins first); re-run the measurement when the full 120 TB
 `find` completes and diff against `results/` (informational — the
 substring/mirror numbers are the before/after of record).
 
+### Phase 24 — Backup, export, and disaster recovery *(added 2026-08-28; STAGED via the staging doc IMPORT_EXPORT.md — decisions await the owner's confirmation before step 0)*
+
+- The owner's requirements, as restated on review: a **full backup** that
+  restores to exactly its point in time, an **incremental** since the last
+  backup *or* since the last full, **chosen at export time**; an optional
+  **native** kind (`pg_dump` on Postgres) that is full-only and returns only
+  to its own backend type and changeset; and **every export carries its own
+  changesets** as the means of bringing a database to its intended catalog
+  state.
+- **The locked principle: portability trumps ease of implementation, every
+  time** — including where assets are stored. The portable backup is the
+  artifact of record and imports only through `inventory-api`, so it works
+  for whatever store an installation chose and *is* how an installation
+  moves between stores; native tooling is a kind, never the path of record.
+- The finding that orders the plan: **the api cannot restore identity**
+  (`createItem` mints; `updateItem` on an unknown id is `false`; assets,
+  tokens, users, regions all mint; `asset_archive` has no read path; audit
+  ordering leaks a backend `seq`) — and every printed label is an item's ULID
+  on a physical object. So step 0 is a **restore surface** in the api, one
+  idempotent write-with-identity per store, proven by the parity kit; no
+  backend is admitted to Phase 20 without round-tripping a backup.
+- Steps: 0 restore surface + `SchemaBundle`; 1 portable backup (api-level
+  JSON lines + media in ingest formats + assets as files, full / incremental
+  / differential lineage); 2 the native kind on Postgres; 3 maintenance
+  mode enforced by the store, mirrored by the bus; 4 export as a
+  cancellable admin job with download; 5 retire the doc.
+- Dropped with reasons recorded in the doc: DbUnit (its unit is the table;
+  two staged backends have none), WAL/PITR as product features
+  (backend-native, outside the product), an application-level change log.
+
+### Phase 25 — External scanning: a filesystem the server cannot reach *(added 2026-08-28; STAGED via the staging doc EXTERNAL_HASHING.md — decisions await the owner's confirmation before step 0)*
+
+- The ask: a single self-contained executable for Windows x86, macOS x86/ARM,
+  Linux x86/ARM that scans a filesystem **offline** — describe AND hash,
+  archive members included — into a named archive with a metadata file;
+  download links in the web-app; an upload endpoint and web action that turn
+  the archive into a data medium.
+- What breaks in the naive shape, all verified: the hasher's online
+  claim/complete model does not apply (no database to reach), so
+  restartability must be a **local journal**; a 179M-path scan uploaded as a
+  request body meets a 10 MB default limit and a `String`-buffering manifest
+  route, so upload must be **resumable-to-disk** and ingest must **stream**
+  (the api change Phase 23 recorded as "not adopted", now required by three
+  callers); nothing identifies *which* medium an upload belongs to, so a
+  **`scan-location` item identity** (Phase 15's marker table) makes re-scans
+  re-describe the same item; "statically linked" is literally possible only
+  on Linux (musl); native-image does not cross-compile, so five platforms
+  means a **CI build matrix**, which collides with the local-release-only
+  rule; and macOS Gatekeeper refuses unsigned browser downloads until the
+  **Apple enrollment** resolves — `curl` works meanwhile.
+- Steps: 0 streaming ingest (shared with Phase 24 and the real-medium
+  catalog run); 1 `inventory-hasher scan` — one tool, two modes, one
+  language, so the archive contract has one implementation under the parity
+  kit; 2 upload + processing job; 3 web-app downloads and upload; 4 the
+  five-platform CI matrix with checksums and cosign signatures attached to
+  the GitHub Release; 5 retire the doc.
+- Vocabulary decision: a scanned filesystem is a **medium**
+  (`DataInfo(REMOTE_STORAGE, …)`), not a "location" — that word already
+  means a place.
+
 ## First milestone (Phase 1, implementable detail)
 
 1. **`inventory-api`** — de-codegen and extend:
