@@ -720,8 +720,10 @@ and the pre-1.0 window for breaking `inventory-api` is closing now that
   6 — physical objects AND data). A medium's contents are a MANIFEST of
   `(path, size, hash, mime type)` rows, NOT a subtree of items: files have
   no par values, labels, or containment of their own. The payoff is
-  `findByHash` ("which disc has this file?", "is this already archived?")
-  and `findMirrorsOf` (same content at the same path).
+  `findByHash` ("which disc has this file?", "is this already archived?"),
+  `findOverlappingMedia` (how much another disc has in common with this one,
+  same content at the same path) and `findDuplicateSections` (subtrees
+  duplicated anywhere, location deliberately ignored — Phase 23).
   - **Archives are the one exception**, because an archive is both a file
     and a container: it stays a row in its medium's manifest AND becomes an
     item with `DataInfo.archive = true` contained by the medium, carrying
@@ -780,10 +782,195 @@ and the pre-1.0 window for breaking `inventory-api` is closing now that
      rule is now: commit unformatted, format once before the branch closes.
 
 **Remaining**: the iOS surface for manifests (deferred
-contracts-settle-first, the Phase 15/16 pattern); the large-directory
-path-layout measurement that decides the final index shape; the rest of the
-TCK kits (assets/regions, auth, audit); and the train's first real run,
-which IS the 0.2.0 release.
+contracts-settle-first, the Phase 15/16 pattern); ~~the large-directory
+path-layout measurement that decides the final index shape~~ *(EXECUTED
+2026-08-27 against the real 11.5M-path tree — it became Phase 23's evidence
+base and settled the trigram GIN)*; the rest of the TCK kits
+(assets/regions, auth, audit); and ~~the train's first real run, which IS
+the 0.2.0 release~~ *(done — `0.2.0` is on Central, resolution proven from
+an emptied `~/.m2`)*.
+
+### Phase 23 — Merkle identity for data media: same discs, and duplicated sections *(added and EXECUTED 2026-08-27 — planned via the since-retired staging doc DATA_MERKLE.md; measurement-driven throughout)*
+
+The question, stated by the owner and broader than ongoing item 6 ever was:
+*"Do I have media that are the same, or alternately where are there
+duplicated sections within my large media inventory?"* — plus a standing
+intent finally written down: *"I always intended data to be identified by
+merkle hashes but never explicitly stated it."*
+
+- **Why the old surface could not answer it.** Two facts, neither a bug:
+  `path_hash` digests the SCOPE-RELATIVE path, so a subtree relocated to a
+  different place on another medium had a different identity despite
+  identical contents; and directories were not entities at all — one row
+  per FILE, a directory only a shared string prefix, so there was no thing
+  to compare. On top of that `findMirrorsOf` answered its per-MEDIUM
+  question with per-FILE rows: Parallel Seq Scan at every measured scale
+  (155 ms at 551k rows, 5,528 ms at 5.5M, ~rows^1.6), and a composite index
+  moved it 0.9–1.5x because the mismatch was the shape of the answer, not a
+  missing index.
+- **The evidence base** (`path-layout-measure.py` against the real
+  11.5M-path `/mnt/mediaX` tree, 2026-08-27; script and `results/` kept in
+  `inventory-impl-pg/src/test/resources/measurements/`): 46.7% of
+  directories hold ≤2 files, 68.6% share a child-name set, 7,492 hold
+  nothing but a `pom.xml` — so section matching without a size floor
+  reports mostly coincidence (**`minFiles` defaults to 8**, and depth does
+  not substitute: those directories sit at every depth). The same run
+  settled the `pg_trgm` GIN for `entriesOf`'s leading-wildcard LIKE
+  (745 ms → ~40 ms at 5.5M rows, ~217 bytes/row).
+- **The hash lattice — the central design fact is WHEN each digest can
+  exist.** `structure` (names + sizes) is computable the moment `find`
+  finishes, so a 120 TB tree is identifiable in minutes and the content
+  Merkle later upgrades a structural match to proof. `merkle` adds content
+  (weeks of reads); `merkle_content` drops file names so a renamed file
+  still matches; `damage` gives the unreadable set its own identity. All
+  four fold the same way — `H("tree" ‖ sorted[children])`, children sorted
+  by hash bytes unsigned, every variable-length field length-prefixed,
+  leaves domain-separated (`"blob"`/`"gone"`) — and **a directory's own
+  name is in NO digest**, which is what lets a folder that was moved AND
+  renamed match its twin. `MerkleHash` and both `DataTree` passes live in
+  inventory-api so the two backends call ONE fold and cannot drift.
+- **Schema folded into `005-data.yaml` IN PLACE — no 006.** Nothing had
+  ever been deployed, the fresh-install window was the reason to do this
+  NOW, and the collapse rule ("no changeset ALTERs a table another
+  changeset created") held. `data_entries`: `hash`/`hash_alg` nullable
+  (the load-bearing change — "known to exist, not yet hashed" finally has a
+  representation), `hash_state` (0 pending / 1 done / 2 unreadable /
+  3 claimed), `claimed_at`/`claimed_by`, `archive_item_id`, the trigram
+  index. New `data_dirs` (a row per directory: the three identity hashes +
+  `unreadable_hash`, subtree files/bytes, pending/unreadable counts;
+  partial indexes gated `subtree_files >= 8`) and `data_unreadable` (the
+  repair index: first seen, last attempt, attempts, reason).
+- **Six decisions, owner-confirmed 2026-08-27:**
+  1. *Sweep-populated rollup, no incremental counter* — a counter costs
+     781M ancestor UPDATEs at 50M files (91x the sweep) and makes the root
+     a hot row every hasher contends on, defeating `SKIP LOCKED`;
+     recomputing from ground truth also makes crash recovery free.
+  2. *`structure` includes names AND sizes* — free (size is on the row) and
+     it separates the coincidental matches a names-only hash collapses.
+  3. *Ingestion is `find`-shaped* (`%s\t%TFT%TT\t%p`; trailing `/`
+     expresses empty directories, without which two trees differing only by
+     one collide); `sha256sum` becomes the hash-completion feed it always
+     secretly was. This killed `parseDigestLines`' hardcoded `size=0`,
+     which would have silently no-opped every byte floor.
+  4. *Archives participate fully.* An archive is a file AND a container;
+     its item's root Merkle lands in the same indexed column as any
+     directory's, so `photos-2019.zip` matching loose `photos/2019/` is an
+     equality join. `archive_item_id` was the one required addition —
+     `mintArchive` names items by BASENAME, so two `backup.zip` at
+     different paths were indistinguishable.
+  5. *Depth-first per medium* — finish a mounted disc so it can be shelved.
+  6. *Unreadable files: hash readable children + contractually record the
+     unreadable set.* Not comparison metadata — an **actionable repair
+     index**: if disc A cannot read a file and disc B can, that is a
+     restore.
+- **Stage 1 — schema + structure hashing** *(gate closed on the real tree:
+  the `.snapshots/5160`-vs-`5161` within-medium case found, across-media
+  sections found, and the size floor cut 1,622 reported sections to 33)*.
+  Hash-preserving `replaceManifest` (park/carry on "same file" =
+  path+size+mtime, `IS NOT DISTINCT FROM` for null mtimes) plus
+  `find`-shaped text ingest. Running the real medium also exposed
+  `intern()`'s per-name INSERT+SELECT chain — an 80k-entry manifest that
+  never completed in 10 minutes became **14.0 s** after batching to two
+  array round trips.
+- **Stage 2 — the restartable hashing worker + archive scanner** *(gate:
+  `killAndRestartHashesEveryFileExactlyOnce`, the projector's drill applied
+  to this queue, green on both backends)*. Claims are committed leases
+  (`FOR UPDATE SKIP LOCKED`), not held transactions; `complete()` re-checks
+  size+mtime so a changed file is refused, and a refused completion leaves
+  the claim standing so a stale manifest cannot spin. `DataHasher` is the
+  blocking loop that reads real bytes through `ContentSource`
+  (`DirectorySource`, `ArchiveSource`) — an archive is hashed by exactly
+  the code that hashes a loose tree, against its own item.
+  The three not-hashed outcomes stay distinct: medium absent (mark
+  NOTHING — an unplugged disc is not a disc full of damage), unreadable
+  (an outcome; the medium finishes damaged-but-done), stale (left alone;
+  the answer is a fresh manifest, not a digest on a row naming different
+  bytes). Symlinks are recorded unreadable by name, never followed and
+  never skipped. Archive identity is the PATH: re-listing reuses the item
+  at a path that came back (hashes inside it survive a re-describe — proven
+  by reverting the fix), and reaping is "what this description dropped".
+- **Stage 3 — rollup, overlap, repairs** *(all four gates green on BOTH
+  backends, first run: (a) a relocated subtree found by MERKLE and provably
+  invisible to path-equality; (b) a renamed file found by CONTENT and
+  correctly refused by MERKLE; (c) `identical` vs `contains` — a copy told
+  from a superset, which the old return type could not express;
+  (d) identically damaged media match, damaged-vs-intact does not)*.
+  `DataHashing.rollUp` sweeps; the worker sweeps at the end of every run so
+  content answers stay current without a second command.
+  `findOverlappingMedia` replaced `findMirrorsOf` end to end (api, both
+  backends, TCK, bus, HTTP) — same-path-same-content is still deliberately
+  its rule, asserted in the TCK right next to sections ignoring location,
+  so a later reader cannot "fix" one into the other. `findRepairs` turns
+  damage into a work list, matched by PATH because an unreadable file has
+  no content digest — the retired path-equality semantic's better second
+  life; a repair with an empty `availableOn` is the row that matters most.
+- **Gate (d) took design, not code.** An unreadable file contributes
+  nothing to a Merkle, so a damaged folder hashes EXACTLY like an intact
+  one holding only the readable half — the digests genuinely agree.
+  Damage therefore carries its own digest (`unreadable_hash =
+  H(sorted[damage leaves])`, relocation-stable like everything else), and
+  the content flavours group by `(identity, damage)`. Partial equality is
+  sound by construction, not by every query remembering a flag.
+- **The full wire surface**: `data.progress`, `data.sections` (the first
+  data action with an OPTIONAL target — one medium's duplicates, or the
+  whole inventory's), `data.overlap`, `data.repairs`, `data.rollup`, each
+  role-mapped, forwarded, and routed
+  (`GET .../data/{progress,sections,overlap,repairs}`,
+  `POST .../data/rollup`, `GET /api/v1/data/sections`). Deliberately NO
+  route claims or completes hashing work: a claim is a lease, leases do not
+  survive being proxied, and the worker runs on the machine the medium is
+  mounted on. RUNBOOK's "Hashing a data medium" section is the operator
+  story, written before the worker shipped and corrected to stay true.
+
+**Lessons worth keeping, each paid for:**
+  1. *The parity kit caught its second and third real divergences.*
+     Postgres was counting and handing out trailing-slash directory markers
+     as hashable work while the memory twin was not — a worker would have
+     reported an intact medium as damaged. One test in the shared kit found
+     it. And all four stage-3 gates passing on Postgres FIRST RUN is the
+     kit working in the other direction: the memory reference had already
+     debugged the semantics.
+  2. *Cascades eat repair indexes.* `data_unreadable` cascades from
+     `data_entries`, so every re-scan silently destroyed the one artifact
+     that is rebuilt only by reading the medium again. Parked and carried
+     now, on the same "still the same file" test as the hashes. Corollary
+     already paid once in stage 2: retiring archive items up front
+     cascade-deleted their entries before anything could be parked.
+  3. *Prove a fix by reverting it.* The archive-identity and
+     directory-marker fixes were both verified by putting the bug back and
+     watching the new tests fail with the exact recorded symptom — the
+     difference between a test that passes and a test that gates.
+  4. *Run the real data before freezing anything.* The `intern()`
+     pathology (stage 1) and the section-floor calibration both came from
+     the actual 11.5M-path tree, not from synthetic fixtures.
+  5. *Docs that promise endpoints before they exist rot instantly.* RUNBOOK
+     named `GET /data/progress` while it was still fiction and had to carry
+     a "not wired yet" note until the wiring landed. Write the operator
+     story early, but mark fiction as fiction.
+
+**Recorded, not adopted:** a streaming rollup fold (today `DataTree.roll`
+holds one medium's entries in memory — acceptable because ingest already
+buffers the same PUT body; fix both ends together or neither);
+size-triage within a medium (hash size-collision groups first, the
+fdupes/rdfind trick — surfaces duplicates sooner at no correctness cost,
+loses to decision 5 only on "can I shelve this disc yet"; revisit if the
+depth-first wait proves annoying).
+
+**Explicitly NOT in scope** (so a later reader does not assume they were
+forgotten): block-level / content-defined chunking (two 40 GB videos
+sharing 90% of their bytes is a different, far more expensive system);
+fuzzy matching (Merkle equality is exact — one changed file does not
+"nearly match"); deduplicating storage (this REPORTS duplication, it never
+moves or deletes anyone's data); bit-rot verification (re-hashing to detect
+change is a neighbour, deliberately separate — the worker records what it
+read, it does not audit what changed).
+
+**Remaining**: the iOS surface for data media (still deferred
+contracts-settle-first); the 0.2.1 break train that ships all of this
+(api/impl/bom/apps sit on `0.2.1-SNAPSHOT`; `train-bom`/`train-apps` must
+restore release pins first); re-run the measurement when the full 120 TB
+`find` completes and diff against `results/` (informational — the
+substring/mirror numbers are the before/after of record).
 
 ## First milestone (Phase 1, implementable detail)
 
@@ -1788,8 +1975,10 @@ free. Item 4 is standalone.
       (path, size, hash, mime type), not a subtree of items; archives are the
       one exception and become contained `DataInfo.archive=true` items
       carrying their own manifests, recursively. `findByHash` answers "which
-      disc has this file?" and `findMirrorsOf` answers "are these two media
-      the same?". Ingestion eats `sha256sum` output, so no client tool
+      disc has this file?"; `findOverlappingMedia` (which replaced
+      `findMirrorsOf` in Phase 23) answers "are these two media
+      the same?" in four numbers and two flags rather than a wall of rows.
+      Ingestion eats `find` and `sha256sum` output, so no client tool
       exists. Remaining: the iOS surface, deferred contracts-settle-first,
       and the large-tree path-layout measurement.)* - This is already partially
       true, but there should be some sort  of container that is a network share mount

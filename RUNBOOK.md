@@ -254,6 +254,137 @@ gateway, in contrast, REQUIRES the fabric — no workers, no API.
   `inventory.events.bus` = `none` (default) | `local` | `clustered`; projector
   poll interval `inventory.projector.poll-interval-ms`.
 
+## Hashing a data medium (PLAN.md Phase 23)
+
+Describing a medium is fast; hashing it is not. `find` lists a 120 TB tree in
+minutes and reads nothing; hashing that tree reads every byte and takes **weeks**.
+The two are deliberately separate jobs, and everything below assumes the second
+one gets interrupted — discs get unplugged, machines reboot, workers get killed.
+
+### Describe first (cheap, no reads)
+
+```sh
+find /mnt/x -type f        -printf '%s\t%TFT%TT\t%p\n'  >  manifest.tsv
+find /mnt/x -type d -empty -printf '\t\t%p/\n'          >> manifest.tsv
+curl -X PUT --data-binary @manifest.tsv -H 'Content-Type: text/plain' \
+  "$API/api/v1/items/$ITEM/data/manifest"
+```
+
+The trailing `/` on the second line is not cosmetic: it is the only way an EMPTY
+directory can be named, and without it two media differing only by an empty
+folder produce identical structure hashes.
+
+**Duplicate-section answers work from this point on**, before a single byte is
+hashed — structure matching uses names and sizes only.
+
+### Then hash (slow, restartable)
+
+`DataHasher` is the worker, and it runs **on the machine the medium is mounted
+on** — not on the server. The disc is in your hand; shipping 120 TB across the
+network so the gateway can read it is not a design. That machine therefore needs
+the same store access the server has: the worker talks to `DataHashing`
+directly, and there is deliberately no HTTP route that claims or completes work,
+because a claim is a lease and leases do not survive being proxied. It claims a
+batch, reads those files, and completes them. Claims are committed rather than
+held, so nothing is lost by killing it:
+
+```java
+try (ContentSource source = new DirectorySource(Path.of("/mnt/x"))) {
+  DataHasher.Outcome done = new DataHasher(hashing).hash(itemId, source, "worker-1");
+}
+```
+
+An archive is the identical call against the archive's OWN item, with
+`ArchiveSource(zipPath)` instead — which is the whole reason archives are items.
+
+A run ends by sweeping the directory rollup, so the content answers below stay
+current without a second command. `POST /api/v1/items/$ITEM/data/rollup` forces
+one by hand if you loaded hashes some other way.
+
+| you want to | do |
+|---|---|
+| see progress | `GET /api/v1/items/$ITEM/data/progress` — `pending`, `claimed`, `done`, `unreadable`, `fraction`, `complete`, `intact` |
+| pause | stop the worker. In-flight claims expire on their own; nothing is corrupted |
+| resume | start it again. It claims whatever is still pending — there is no separate resume command, and a run begins by reclaiming expired claims, so crash recovery is the same command |
+| recover after a crash | nothing. Stale claims return automatically once their lease lapses |
+| abandon a medium | stop the worker and leave it. A partly hashed medium is valid: structure answers still work, content answers cover what finished |
+
+`complete` means nothing is left to do. `intact` means that AND nothing was
+unreadable — a medium can be the first and not the second, which is why they are
+separate fields rather than one.
+
+### Then ask what is duplicated
+
+```sh
+# the whole inventory
+curl "$API/api/v1/data/sections?match=structure"
+# just this medium's content, wherever else it lives
+curl "$API/api/v1/items/$ITEM/data/sections?match=structure&scope=within_medium"
+```
+
+`match` is `structure` (names and sizes — answerable the moment the manifest
+lands, before a byte is hashed), `merkle` (names and content: proof) or
+`content` (content only, so renamed files still match). `scope` is
+`across_media`, `within_medium` or `both`.
+
+**`merkle` and `content` are empty until the rollup has swept**, and a subtree
+with even one unhashed file has no content identity at all — deliberately, so a
+digest never changes meaning as a run proceeds. A folder that was moved AND
+renamed still matches: a directory's identity is what it holds, not its label.
+
+### Then ask what you already have, and what you have lost
+
+```sh
+curl "$API/api/v1/items/$ITEM/data/overlap"   # how much of this disc is elsewhere
+curl "$API/api/v1/items/$ITEM/data/repairs"   # what it could not read, and who has it
+```
+
+`overlap` is per-MEDIUM: `sharedEntries`/`sharedBytes`, plus `identical` (the
+same tree all the way down) and `contains` (theirs is a superset — the "which
+backup is newer" answer). Sameness here is same content at the same PATH, which
+is the opposite of what `sections` does, and both rules are deliberate.
+
+`repairs` lists every unreadable file with `recoverable: true|false`. **The
+`false` rows are the ones that matter** — that damage cannot be restored from
+anything catalogued. Matching is by path, because an unreadable file has no
+content digest to match on; that is what unreadable means.
+
+**`minFiles` defaults to 8 and lowering it is how you drown.** 46.7% of
+directories on the measured tree hold two files or fewer, and 7,492 held nothing
+but a `pom.xml`. `minDepth` does not substitute — those directories sit at every
+depth.
+
+**`pending` reaching zero with `unreadable` above zero means the run is over but
+the medium is NOT intact.** Those two counts are kept apart on purpose —
+conflating them would hide damage. What could not be read is listed per file in
+`data_unreadable`, with the reason and an attempt count, and that list is
+actionable: a file this disc cannot read may be readable on a sibling copy.
+
+### Things that look wrong but are not
+
+- **`claimed` stuck above zero after a worker dies.** Expected. The lease has to
+  lapse before those rows return. Waiting is correct; intervening is not.
+- **A file hashed on one run, pending on the next.** The medium was re-described
+  and that file's size or mtime changed, so its old digest was dropped. That is
+  the design: a digest describing bytes the file no longer has would be a lie
+  nothing could detect later.
+- **Archives showing `pending` long after their medium finished.** An archive is
+  its own item with its own manifest. Listing it is cheap and happens at scan;
+  hashing what is inside means decompressing, and it queues like anything else.
+- **A run reporting `stale` above zero and stopping with files still pending.**
+  Those files no longer match the manifest — their size or mtime moved — so the
+  hasher refused to attach a digest to a row describing different bytes.
+  Re-describe the medium; the fix is a fresh `find`, not a retry.
+- **An unplugged disc reporting no damage.** Deliberate. The hasher checks the
+  medium is present before it marks anything, because recording every path on an
+  absent disc as unreadable would destroy the repair index that the unreadable
+  list exists to be.
+- **A damaged medium NOT matching an intact one that holds the same readable
+  files.** Correct, and it takes work to be correct. An unreadable file
+  contributes nothing to a Merkle, so the two digests genuinely agree; the
+  damage carries its own digest alongside, and matching requires both. Two media
+  damaged in the SAME places do match each other.
+
 ## Formal releases (Phase 14)
 
 One `vX.Y.Z` tag on the superproject releases the whole platform. `develop`
