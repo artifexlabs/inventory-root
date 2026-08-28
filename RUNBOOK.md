@@ -279,23 +279,30 @@ hashed — structure matching uses names and sizes only.
 
 ### Then hash (slow, restartable)
 
-`DataHasher` is the worker, and it runs **on the machine the medium is mounted
-on** — not on the server. The disc is in your hand; shipping 120 TB across the
-network so the gateway can read it is not a design. That machine therefore needs
-the same store access the server has: the worker talks to `DataHashing`
-directly, and there is deliberately no HTTP route that claims or completes work,
-because a claim is a lease and leases do not survive being proxied. It claims a
-batch, reads those files, and completes them. Claims are committed rather than
-held, so nothing is lost by killing it:
+**`inventory-hasher` is the worker**, and it runs **on the machine the medium
+is mounted on** — not on the server. The disc is in your hand; shipping 120 TB
+across the network so the gateway can read it is not a design. That machine
+therefore needs the same store access the server has: the worker talks to
+Postgres directly, and there is deliberately no HTTP route that claims or
+completes work, because a claim is a lease and leases do not survive being
+proxied. It claims a batch, reads those files, and completes them. Claims are
+committed rather than held, so nothing is lost by killing it:
 
-```java
-try (ContentSource source = new DirectorySource(Path.of("/mnt/x"))) {
-  DataHasher.Outcome done = new DataHasher(hashing).hash(itemId, source, "worker-1");
-}
+```sh
+# build once (workspace): mvn -pl inventory-hasher package
+# then ship inventory-hasher/target/quarkus-app to the machine with the medium
+export QUARKUS_DATASOURCE_REACTIVE_URL=postgresql://inventory-host:5432/inventory
+export QUARKUS_DATASOURCE_USERNAME=inventory QUARKUS_DATASOURCE_PASSWORD=...
+
+java -jar quarkus-run.jar hash --item $ITEM --root /mnt/x
+java -jar quarkus-run.jar progress --item $ITEM     # one line, then exits
 ```
 
 An archive is the identical call against the archive's OWN item, with
-`ArchiveSource(zipPath)` instead — which is the whole reason archives are items.
+`--archive /mnt/x/backup.zip` instead — which is the whole reason archives are
+items. Exit codes tell the medium's story: `0` finished what could be finished
+(the summary says whether it is intact), `3` medium absent — nothing was
+marked, `4` stale manifest — re-describe with a fresh `find`, don't retry.
 
 A run ends by sweeping the directory rollup, so the content answers below stay
 current without a second command. `POST /api/v1/items/$ITEM/data/rollup` forces

@@ -25,3 +25,6 @@
 [submodule "inventory-bom"]
 	path = inventory-bom
 	url = git@github.com:artifexlabs/inventory-bom.git
+[submodule "inventory-hasher"]
+	path = inventory-hasher
+	url = git@github.com:artifexlabs/inventory-hasher.git

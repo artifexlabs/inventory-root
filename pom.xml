@@ -20,5 +20,6 @@
     <module>inventory-web-api</module>
     <module>inventory-web-app</module>
     <module>inventory-projector</module>
+    <module>inventory-hasher</module>
   </modules>
 </project>
