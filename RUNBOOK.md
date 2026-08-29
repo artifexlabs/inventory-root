@@ -274,6 +274,15 @@ The trailing `/` on the second line is not cosmetic: it is the only way an EMPTY
 directory can be named, and without it two media differing only by an empty
 folder produce identical structure hashes.
 
+**A file name containing a newline breaks this format**, and `find -printf
+'%p\n'` does not escape one: the name arrives as several lines, and the
+manifest parser refuses the WHOLE manifest at the first fragment (it cannot
+tell a broken name from a broken file). The real 120 TB tree has 297 such
+lines from a handful of files (measured 2026-08-29). Find them first —
+`find /mnt/x -name $'*\n*'` — and rename them, or wait for the scan archive
+format (PLAN.md Phase 25), which escapes names. Tabs inside names are fine:
+the parser splits on the first two tabs only.
+
 **Duplicate-section answers work from this point on**, before a single byte is
 hashed — structure matching uses names and sizes only.
 
