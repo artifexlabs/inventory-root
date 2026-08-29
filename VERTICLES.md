@@ -6,7 +6,12 @@ gained a second plane and `inventory-server` came back as its worker host), then
 EXTENDED 2026-08-21/22 by Phase 21 (PLAN.md): the bus gained a status plane, a
 printer packet protocol, and single-door storage isolation, and again 2026-08-22 by
 Phase 22 (an originating request id on every envelope, and the `data.*` manifest
-vocabulary). This document describes the architecture as built. Companion to [PLAN.md](PLAN.md),
+vocabulary), then 2026-08-27/28 by Phase 23 (`DataHashing` joins the storage
+door; seven more `data.*` actions, `data.mirrors` retired; and the first writers
+that bypass the bus BY DESIGN — see traffic kind 5). Phases 24 and 25 are STAGED
+(IMPORT_EXPORT.md, EXTERNAL_HASHING.md) and touch this record where noted.
+Revised 2026-08-29 against the code. This document describes the architecture as
+built. Companion to [PLAN.md](PLAN.md),
 [deploy/DEPLOYMENT.md](deploy/DEPLOYMENT.md) (how to run it), and
 [RUNBOOK.md](RUNBOOK.md).*
 
@@ -67,10 +72,19 @@ survived that revision untouched — only the topology and the request path chan
      printers speak one-way TCP 9100, so "printed" was never a fact anyone
      possessed. The outcome follows on the status plane. Contract:
      `PrintPackets`, beside the envelope in `io.artifexlabs.inventory.api.bus`.
-  5. **Internal storage operations** on `storage` — every read and write of the
-     backing store, as whole-unit DOMAIN operations (never composable CRUD,
-     because two bus messages can never share a database transaction). Unguarded
-     by design; see the security model.
+  5. **Internal storage operations** on `storage` — every read and write the
+     *services* make against the backing store, as whole-unit DOMAIN operations
+     (never composable CRUD, because two bus messages can never share a
+     database transaction). Unguarded by design; see the security model.
+     *(Revised 2026-08-29:)* "every" has two deliberate exceptions, both direct
+     Pool writers outside the bus: **`inventory-hasher`** (Phase 23) holds a
+     claim on files under a lease and completes them from the machine the medium
+     is mounted on — a lease does not survive being proxied, so it talks to
+     Postgres directly and there is no bus action that claims or completes work;
+     and **`inventory-projector`** owns `projections` / `consumer_cursors`
+     outside both the bus and Liquibase (`ensureTables`). Plus `just migrate`.
+     IMPORT_EXPORT.md §1 tabulates all six writers; it is why maintenance mode
+     (Phase 24, staged) must be enforced by the store and only *mirrored* here.
 
   *(Phase 22, 2026-08-22:)* every envelope now also carries a **`requestId`**,
   minted once at the gateway and passed unchanged through forwards, derived
@@ -171,12 +185,24 @@ Package `io.artifexlabs.inventory.api.events` (in `inventory-api`):
   `JsonObject` crosses the clustered bus natively; no custom codecs.
 - **Addresses**: `publish` (fan-out; never `send`) to `inventory.events` and to
   `inventory.events.<category>`, category = the action prefix
-  (`item`, `location`, `asset`, `region`, `user`, `token`, `label`). The action
-  vocabulary is the existing audit vocabulary: `item.create/update/delete/contain/
-  uncontain/move`, `asset.attach/delete`, `region.create/delete`,
-  `user.create/delete/set-admin/identity-link`, `token.revoke`, `label.print`.
+  (`item`, `asset`, `region`, `user`, `token`, `label`, and `data` — see the
+  note below). The action vocabulary is the audit vocabulary as the code has it
+  (refreshed 2026-08-29; 26 actions):
+  `item.create/update/delete/contain/uncontain/move/tag/untag/identity-add/
+  identity-remove/create-from-region`, `asset.attach/replace/delete`,
+  `region.create/delete`, `user.create/delete/set-admin/identity-link`,
+  `token.revoke`, `label.print/print-batch/feed`, `data.replace/rename`.
   (`location.*` survives only in historical audit rows — locations became items
   with Phase 15's unified containment.)
+- **The data domain is audited but NOT published** *(found 2026-08-29;
+  decision to confirm)*: `PgDataSystem` writes `data.replace` / `data.rename`
+  audit rows in-transaction like every other store but carries no
+  `EventPublisher`, so those facts never reach `inventory.events.*`; and
+  `PgDataHashing` audits nothing at all, by design — it is a queue, and a
+  179M-row manifest is one audit row, not 179M. A consumer that wants data
+  facts today must poll `since(seq)`. Either wire the publisher (cheap; the
+  seam exists) or record that data facts are cursor-only; nothing depends on
+  the answer yet.
 - **`EventPublisher`**: `void publish(AuditEvent e)` — fire-and-forget, never throws,
   never blocks; ships with `EventPublisher.NOOP`. Mutation success must never couple
   to publication.
@@ -189,7 +215,8 @@ Package `io.artifexlabs.inventory.api.events` (in `inventory-api`):
 Events publish at the same choke points that build audit rows — the private
 `audit(conn, …)` helpers in `PgInventorySystem` / `PgAssetStore` /
 `PgRegionSystem` and the auto-commit `PgAudit.record` path (`PgLocationSystem` is
-gone; locations became items with Phase 15) — but **after** the
+gone; locations became items with Phase 15; `PgDataSystem` has the same helper
+but no publisher — see the event contract) — but **after** the
 transaction (or statement) completes successfully. Publishing inside the transaction
 is rejected: it announces changes that may roll back. This is a dual-write and it is
 accepted: if the process dies between commit and publish, the row exists, the bus
@@ -198,11 +225,17 @@ need a relay/CDC daemon that the catch-up protocol makes unnecessary.
 
 ## Consumer catch-up protocol
 
-1. `audit_events` gains `seq BIGSERIAL` (indexed; shipped as changeset
-   `013-audit-seq.yaml`, since folded into `004-audit.yaml` in the
-   `inventory-impl-changeset` module by the schema consolidation).
-   ULIDs are assigned before commit, so ULID order can disagree with commit order
-   under concurrency; `seq` is the reliable cursor, read with a small overlap.
+1. `audit_events` carries `seq` — a `bigint` **identity column**
+   (`GENERATED BY DEFAULT AS IDENTITY`; verified 2026-08-29 from Liquibase's
+   own `update-sql`; NOT a bigserial, as stage 2 below already recorded), shipped
+   as changeset `013-audit-seq.yaml` and since folded into `004-audit.yaml` in
+   the `inventory-impl-changeset` module by the schema consolidation. ULIDs are
+   assigned before commit, so ULID order can disagree with commit order under
+   concurrency; `seq` is the reliable cursor, read with a small overlap.
+   *(Phase 24 D9, staged:)* `seq` is backend-generated and therefore
+   **non-portable** — it never appears in a backup, is regenerated on restore,
+   and `AuditReader.since(seq)` is documented as the projector's in-backend
+   cursor only; the portable ordering of audit is ULID id.
 2. `AuditReader` gains `since(long seq, int limit)`.
 3. Consumer loop: page `since(cursor)` until drained → subscribe to
    `inventory.events.*` → dedupe by `id` → advance the durable cursor (consumer's own
@@ -365,7 +398,20 @@ mandatory (no workers, no API), while `inventory.events.bus` still defaults to
   splitting it would tear the transaction that makes a manifest a snapshot.
   Envelope payloads are fully buffered (above), so a listing large enough to
   strain that is the recorded trigger for chunked staging on the storage side —
-  not for making the operation composable.
+  not for making the operation composable. **The trigger has fired**
+  *(2026-08-29)*: the real medium is ~120M entries, the gateway route buffers
+  the body in a `String`, and the largest manifest ever carried was 80k
+  entries. Streaming ingest — the body staged to disk, the storage operation
+  fed as a stream while staying ONE transaction — is TODO.md item 3
+  (EXTERNAL_HASHING.md step 0); the whole-unit rule is unchanged.
+- **The large-file side channel now has a shape** *(Phase 25 D9, staged)*: a
+  resumable upload written to disk and processed as a job — never a request
+  body, never an envelope payload.
+- **Maintenance mode** *(Phase 24 step 3, staged)*: `StorageVerticle` would
+  gain its first refusal that is not about *who* — 503 `system.read-only`
+  while the store reports read-only — mirroring a flag the DATABASE enforces,
+  because the bypassing writers above never see the bus. `BusGuard` stays out
+  of it: admission is about who, this is about when.
 - **Storage isolation adds a hop** *(Phase 21)*: every data access crosses the bus
   to `StorageVerticle` — in-process in embedded mode, the network in remote mode.
   Accepted for single-flight storage discipline; chatty BFF views may eventually
