@@ -55,9 +55,13 @@ NOT chosen here — that remains an open unknown; nothing below forecloses any s
       `brew install --cask android-studio`.)*
 - [ ] **Android emulator or physical device** boots and `adb devices` sees it
       (physical device: enable developer mode + USB debugging).
-- [ ] **Node.js LTS** — absent; required ONLY if the (undecided) stack is
-      React Native/Expo/Capacitor/Ionic. Leave unchecked until the stack decision;
-      install then (`brew install node`). *Verify:* `node --version`.
+- [x] **Node.js LTS** — INSTALLED 2026-08-29 by the owner with a machine update:
+      v26.8.1, npm 11.19.0 (`/usr/local/bin/node`). *Verify:* `node --version`.
+      Note the stack decided 2026-08-09 (native SwiftUI, native Kotlin + Compose —
+      PLAN.md open unknowns) never needed it for mobile; the web-app's Vite
+      islands use the Node that `frontend-maven-plugin` downloads for itself, so
+      a system Node is a convenience for hand-running the island toolchain, not
+      a build input. The gate is closed either way.
 
 ## Deep-link wiring (deferred — depends on a public HTTPS domain, not credentials)
 
@@ -69,5 +73,9 @@ NOT chosen here — that remains an open unknown; nothing below forecloses any s
 
 ## Done when
 
-Every box above except the two deferred deep-link items and Node (stack-dependent) is
-checked. At that point mobile development can start the same day the stack is chosen.
+Every box above except the two deferred deep-link items is checked. At that point
+mobile development can start the same day the stack is chosen. *(Re-verified
+2026-08-29 after a macOS 15.7.9 update: JDK 21.0.12, Xcode 26.3 / CLT 16.4, the
+iOS 26.3 runtime, and Android platform 35 all still present; `adb devices` still
+sees no device — the one local-tooling box left open, and the owner has said
+Android waits.)*
