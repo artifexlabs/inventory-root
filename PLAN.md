@@ -1032,6 +1032,84 @@ substring/mirror numbers are the before/after of record).
   (`DataInfo(REMOTE_STORAGE, …)`), not a "location" — that word already
   means a place.
 
+### Phase 26 — Virtual threads at the storage door: sequential code where the complexity is *(added 2026-08-29; STAGED — a design decision to take deliberately, not a version bump)*
+
+- **What the complexity actually is.** Measured 2026-08-29: the storage
+  layer holds **136 `flatMap`/`thenCompose` chains**, 43 hand-seeded
+  `Uni.createFrom()` chains, and ~165 lambdas whose parameter is ignored —
+  every multi-step storage operation is a chain of callbacks, and the loops
+  that extend a chain per element (`storeScope` per archive, `renamePath` per
+  row, `intern()` per name) are the most fragile code in the repo. The
+  `intern()` pathology — a 100k-deep chain that never completed — was this
+  shape failing, not a bug in a query. No Java version changes it; a
+  threading model does.
+- **The decision.** Inside the storage door — `StorageVerticle` and the
+  `Pg*` backends behind it — code runs on **virtual threads** and is written
+  as ordinary sequential Java: a transaction is a block, a loop is a loop,
+  an error is an exception. Each Pg method awaits the Mutiny pool
+  (`await().indefinitely()` on a virtual thread parks, it does not block a
+  carrier), so the reactive client, its transactions, and `FOR UPDATE SKIP
+  LOCKED` are untouched. Vert.x 4.5.31 (the workspace's) already has
+  `ThreadingModel.VIRTUAL_THREAD`; `BusWorkers.deploy` already sets a
+  threading model per verticle.
+- **What does NOT change — the boundaries stay.** The api contract stays
+  `CompletionStage` (the parity kit is unchanged and is the gate); the bus,
+  the public verticles, the gateway, and every north-south hop stay
+  event-loop asynchronous — this is the *storage door* only, the same line
+  Phase 21 drew for single-flight storage; `DataHasher` is already a
+  blocking loop by design and gains nothing; the in-memory twin is already
+  synchronous and gains nothing — which is itself the argument: the memory
+  backend reads like what it does, and the Pg backend should too.
+- **What it buys beyond readability.** Streaming ingest (TODO.md item 3)
+  becomes a `for` loop over a stream inside one transaction block, instead
+  of a `Publisher` threaded through a reactive transaction — the hardest
+  part of that item gets easier by an order of magnitude. `ScopedValue`
+  (Java 25) can carry the acting principal through a storage call instead of
+  per-request `actingAs` view objects, because scoped values propagate on
+  virtual threads and never did across chains. The storage vocabulary stays
+  whole-unit, so batch operations for chatty BFF views (a Phase 21 risk)
+  become plain methods.
+- **The Java 25 tie-in, stated precisely.** On Java 21 a virtual thread
+  that blocks inside `synchronized` **pins** its carrier (JEP 444's known
+  limitation); JEP 491 removed that in Java 24. Two storage classes use
+  `synchronized` today (`InMemoryAssetStore`, `InMemoryDataHashing`), and
+  libraries underneath may too. So this phase prefers Java 25 — it is the
+  one code-quality argument for the JDK bump that is more than cosmetic —
+  and it is why the parent-chain move (`artifex-maven-parent 3`) is the
+  natural moment; on 21 it still works, with `-Djdk.tracePinnedThreads` in
+  the gate to prove pinning is absent or bounded.
+- **Steps**, each a feature branch off `develop`, each gated by the parity
+  kit passing *unchanged*:
+  0. Decide the JDK (above); pin it in the parent chain; Quarkus platform
+     to a Java-25-capable line (`3.27.5.1` today; 25 support arrived ~3.28).
+  1. `StorageVerticle` deploys with `ThreadingModel.VIRTUAL_THREAD`; one
+     handler ported as the proof; a bounded-concurrency guard (a semaphore
+     sized to the pool) so unlimited virtual threads cannot exhaust a pool
+     of four connections. *Gate: the storage isolation tests and the
+     kill-and-restart drills pass; `-Djdk.tracePinnedThreads=full` reports
+     nothing from our code.*
+  2. Port `PgDataSystem.storeScope` / `replaceManifest` — the worst chain in
+     the repo — to sequential code. *Gate: `DataSystemTck` unchanged and
+     green on Pg; the 80k-entry real manifest that took 14.0 s after the
+     `intern()` fix is not slower; the hash-preserving carry, archive reuse,
+     and the after-commit fact publication all still hold (PgDataFactsTest).*
+  3. The rest of the Pg stores, one per branch, TCK-gated each time; the
+     `Uni` chains leave the storage layer's internals.
+  4. Streaming ingest (TODO.md item 3) is written in the new style, as a
+     loop — the first feature built on the door rather than ported through
+     it.
+- **Risks, stated.** A virtual thread awaiting a Mutiny `Uni` that itself
+  needs the *same* Vert.x context to complete would deadlock — the reason
+  the event loop must never await, and the reason the door is the only place
+  this happens; Mutiny's `await()` refuses on an event-loop thread, which is
+  the right failure. Unbounded virtual threads against a bounded pool are
+  a queue with no back-pressure — hence the semaphore. Quarkus's Dev
+  Services and Testcontainers harnesses are indifferent. The memory twin
+  keeps proving parity, but it cannot prove threading behaviour: the pinning
+  and concurrency gates are Pg-only and must be written as such.
+- **Not in scope.** Making the bus synchronous, or the gateway; touching
+  `DataHasher`; a broker. The phase is one line drawn at one door.
+
 ## First milestone (Phase 1, implementable detail)
 
 1. **`inventory-api`** — de-codegen and extend:
