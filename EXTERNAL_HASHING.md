@@ -102,7 +102,11 @@ for exactly "a marker resolving to an item" (`upc`, `nfc-uid`, …). A
   `libSystem`; the best possible is a single self-contained executable that
   links only the OS's own libraries. That is what everyone means and it is
   fine, but it is not "statically linked".
-- **Windows** x86: same shape — a single `.exe` against the system CRT.
+- **Windows** x86: same shape — a single `.exe` that depends on the
+  Microsoft Visual C++ runtime, which ships with Windows 10 and 11.
+  Statically linking that runtime is not believed to be a supported
+  native-image option; the build matrix (step 4) verifies the dependency set
+  rather than promising either way.
 
 And native-image does **not cross-compile**: each of the five binaries is
 built on its own OS/arch. The workspace's native path today is `just native`
@@ -204,8 +208,13 @@ a location would put a hard drive in the same vocabulary as a garage shelf.
   that keeps the transaction and the hash-preserving carry) and a streaming
   `DataTree` fold. This doc, IMPORT_EXPORT step 1, and the catalog track all
   need it; it is built once, first, and gated at the real scale.
-- **D5. "Static" means: musl-static on Linux, self-contained on macOS and
-  Windows.** Stated on the downloads page in those words.
+- **D5. The claim is "no runtime dependencies beyond the operating system
+  itself" — true on all five targets — not "statically linked", which is
+  true only on Linux.** Linux binaries are genuinely static
+  (`--static --libc=musl`); macOS and Windows binaries are single files that
+  link only the OS's own runtime, because Apple ships no static `libSystem`
+  and no toolchain can do better there. The downloads page uses the first
+  phrasing and says "statically linked" only next to the Linux assets.
 - **D6. The five binaries are built by CI and attached to a GitHub Release;
   the owner's local machine still cuts the release.** The tag is created
   locally (the standing rule holds for the *decision* to release); the
