@@ -57,6 +57,12 @@ iOS app ──HTTP──▶ inventory-web-api (:8081, JVM)     ◀── the ONL
   `internal: true` and ports 7800/15701 are never published.
 - The three bus members run as **JVM containers** (vertx-infinispan is the one
   component not proven under GraalVM native); the web-app stays native.
+- **`inventory-hasher` is not a service in the stack.** It is a CLI that runs
+  on the machine a data medium is mounted on and talks to Postgres directly
+  (RUNBOOK "Hashing a data medium"). The compose file does not publish 5432,
+  so from another machine it needs an SSH tunnel to the compose host
+  (`ssh -L 5432:postgres:5432 <host>`) or a deliberately published port on a
+  trusted LAN — a deployment choice, made per site.
 
 ## Configuration (`.env` at the workspace root — compose and `just` auto-load it)
 
@@ -67,6 +73,7 @@ iOS app ──HTTP──▶ inventory-web-api (:8081, JVM)     ◀── the ONL
 | `INVENTORY_ADMIN_EMAIL` / `INVENTORY_ADMIN_PASSWORD` | `admin@example.com` / `change-me` | seeded idempotently at server startup |
 | `INVENTORY_PRINTER` / `INVENTORY_PRINTER_HOST` / `..._PORT` / `..._TAPE_MM` | `log` / – / `9100` / `24` | hardware label printer (Brother PT-P750W); consumed by inventory-server |
 | `INVENTORY_CATALOG` | `open-facts,upcitemdb` | external UPC catalog sources for scan-to-create prefill (Phase 17), ordered; `off` disables lookups — creation still works from typed fields. The ONLY external calls the stack ever makes. |
+| `INVENTORY_QR_BASE_URL` | `http://localhost:8081` in code; compose and Helm set the web app (`:8082` / `webHost`) | **the public base URL of the web app as a phone will reach it** — the only base URL the system has; see "The public base URL" below. The code default points at the API, which does not serve `/i/`: a known wart, TODO.md item 2 |
 | `INVENTORY_VERSION` | `latest` | released deploys only (see below) |
 
 
@@ -146,7 +153,7 @@ apps plus `inventory-migrate`; mobile releases live on separate store
 tracks and are not part of this stack). Pushing the tag runs `release.yml`,
 which builds and publishes them; the manual flow below is the fallback.
 
-### Producing a release (build host, manual until Phase 14 executes)
+### Producing a release (build host — the fallback; `release.yml` does this when a tag is pushed)
 
 ```sh
 VERSION=0.1.0          # the release being cut
@@ -178,8 +185,8 @@ the public `inventory-migrate` image — nothing is mounted and no registry
 token is needed):
 
 ```sh
-git clone --recurse-submodules git@github.com:artifexlabs/inventory-root.git inventory
-cd inventory && git checkout "v${VERSION}" && git submodule update --init inventory-impl
+git clone git@github.com:artifexlabs/inventory-root.git inventory
+cd inventory && git checkout "v${VERSION}"      # no submodules needed: only deploy/ is used
 
 cat > .env <<'EOF'            # real secrets, never the dev defaults
 POSTGRES_PASSWORD=<strong>
@@ -203,7 +210,7 @@ starts, so schema upgrades are part of every deploy.
 ```sh
 # upgrade: bump the version, pull, re-up (data volume untouched)
 sed -i '' 's/^INVENTORY_VERSION=.*/INVENTORY_VERSION=0.2.0/' .env
-git checkout v0.2.0 && git submodule update --init inventory-impl
+git checkout v0.2.0
 docker compose --project-directory . -f deploy/docker-compose.yml -f deploy/docker-compose.release.yml pull
 docker compose --project-directory . -f deploy/docker-compose.yml -f deploy/docker-compose.release.yml up -d
 
@@ -212,6 +219,66 @@ docker compose --project-directory . -f deploy/docker-compose.yml -f deploy/dock
 # releases whose changesets you also roll back (RUNBOOK.md "Migrations":
 # `just rollback <count>`). Take a backup first: `just backup`.
 ```
+
+## The public base URL, and moving hosts
+
+*Recorded 2026-08-29, answering "can the base URL change at any time, with the
+only effect that previously printed QR codes stop working unless a redirect is
+in place?" — yes, and this is exactly how.*
+
+### The one knob
+
+`INVENTORY_QR_BASE_URL` (`inventory.qr.base-url` on the gateway) is the only
+place a base URL exists in code. It is used for exactly one thing: composing
+the QR payload `<base>/i/<ulid>` when a label is printed or a QR image is
+served. That is the entire footprint. The web app's `/i/{id}` route is a bare
+redirect to `/items/{id}`, so a deep link carries no state beyond the ULID.
+
+### What makes it portable
+
+- **Nothing in the database knows the host.** Items are ULIDs; every template
+  link is relative (no host is baked in anywhere); the web app reaches the API
+  through server-side config (`INVENTORY_WEB_API_URL`), so a browser never
+  learns the API's address. The only place a URL is *stored* is the
+  `label.print` audit detail — a record of what was printed, which is correct.
+- **Our own scanner ignores the host.** The iOS parser takes the ULID after
+  the last `/i/` path segment from *any* host, and accepts a bare ULID. A
+  label printed under an old base still resolves in our app after a move;
+  only a generic camera app depends on the printed host being alive.
+- **9 mm labels carry no host at all** — narrow tape tiers down to the bare
+  ULID payload, the most portable form there is.
+
+So a move is: change the variable, redeploy the gateway. Labels printed before
+the move point at the old host — and because `/i/*` carries nothing but the
+id, healing them is one rule on the old host:
+
+```
+# whatever still answers for the old name, permanently:
+301  /i/*  ->  https://<new-base>/i/*
+```
+
+### The move checklist
+
+Three settings are independent by design — nothing is derived from request
+headers, because proxies lie — so they are kept consistent by hand:
+
+1. `INVENTORY_QR_BASE_URL` on the gateway → the new web-app URL.
+2. `INVENTORY_WEB_API_URL` on the web app, if the API moved too.
+3. The iOS app's server URL (Settings), if the API moved.
+4. Google OIDC: add the new callback URL in Google's console. The callback
+   itself follows the request host automatically (nothing is pinned in
+   config), but Google must whitelist it — the one step outside this repo.
+5. The `/i/*` redirect on the old host, for labels already on objects.
+6. Backups taken before the move record the old base as provenance (PLAN.md
+   Phase 24, D5); a restore under a different base says "labels printed
+   before this backup will need reprinting" and continues.
+
+### Known warts (TODO.md item 2)
+
+- The property is named for QR but *is* the public web-app URL; it should be
+  `inventory.public.base-url` with the old name kept as an alias.
+- The code default is the API's port, which never serves `/i/`; it should
+  default to the web app or refuse to print a label until set.
 
 ## Security invariants (all deployments)
 
