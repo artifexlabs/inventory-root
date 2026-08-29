@@ -194,15 +194,18 @@ Package `io.artifexlabs.inventory.api.events` (in `inventory-api`):
   `token.revoke`, `label.print/print-batch/feed`, `data.replace/rename`.
   (`location.*` survives only in historical audit rows — locations became items
   with Phase 15's unified containment.)
-- **The data domain is audited but NOT published** *(found 2026-08-29;
-  decision to confirm)*: `PgDataSystem` writes `data.replace` / `data.rename`
-  audit rows in-transaction like every other store but carries no
-  `EventPublisher`, so those facts never reach `inventory.events.*`; and
-  `PgDataHashing` audits nothing at all, by design — it is a queue, and a
-  179M-row manifest is one audit row, not 179M. A consumer that wants data
-  facts today must poll `since(seq)`. Either wire the publisher (cheap; the
-  seam exists) or record that data facts are cursor-only; nothing depends on
-  the answer yet.
+- **The data domain publishes like every other** *(found and fixed
+  2026-08-29)*: `PgDataSystem` wrote `data.replace` / `data.rename` (and the
+  `item.create` of minted archive items) in-transaction like every other store
+  but carried no `EventPublisher`, so on Postgres those facts never reached
+  `inventory.events.*` — while the in-memory twin, which audits through the
+  decorated sink, published them all along. One operation, two emissions: a
+  parity divergence the kit could not see because it does not test emission.
+  Now the Pg backend collects the facts an operation wrote and announces them
+  after commit, same ids as the rows. `PgDataHashing` still audits nothing, by
+  design — it is a queue, and a 120M-row manifest is one audit row, not 120M;
+  "this medium finished hashing" as a fact would be one event at the end of a
+  `rollUp`, a separate decision.
 - **`EventPublisher`**: `void publish(AuditEvent e)` — fire-and-forget, never throws,
   never blocks; ships with `EventPublisher.NOOP`. Mutation success must never couple
   to publication.
