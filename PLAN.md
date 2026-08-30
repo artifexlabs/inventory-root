@@ -616,7 +616,9 @@ as one publication that cannot drift.
   and non-overlapping**: audit records committed domain facts durably;
   status events are best-effort operational outcomes for humans-now.
 - **Printers are bus participants** (ask 1): `PrintPackets` +
-  `LabelPrinterVerticle` in `inventory-impl-printer-common` own
+  `LabelPrinterVerticle` — in `inventory-impl-printer-common` as built, moved
+  to `inventory-impl-bus` beside the other verticles on 2026-08-30 (feature
+  `independent_printing`) — own
   `printer.print`, `printer.print-batch`, `printer.feed`. Packets are
   self-contained (serialized item, scan URL, format, optional QR) with a
   documented by-reference escape hatch. The verticle is vendor-AGNOSTIC —
@@ -669,7 +671,15 @@ as one publication that cannot drift.
   reachable from the domain modules. `Ulid`, `Gtin` and the `UserStore`
   interface promoted to api; `QrCodes` went to printer-common with zxing
   rather than dragging a QR library into the contracts module (owner
-  decision). Per-verticle module PAIRS were considered and rejected: ~16
+  decision). *(Revised 2026-08-30, `independent_printing`: the bus no longer
+  depends on printer-common at all — the printer verticle lives in the bus
+  module, and the one thing the bus took from `QrCodes`, the served PNG, is
+  `QrImages` in the bus module with zxing directly. printer-common now
+  depends on nothing in the train, not even the api; brother and zebra
+  depend on the api and printer-common only; `dependency:analyze` is clean
+  on all four. The three printer modules are a layer with no edge back
+  into the train, which is what would let them release on their own
+  cadence.)* Per-verticle module PAIRS were considered and rejected: ~16
   modules for the identical compiler guarantee.
 - **Two lessons worth keeping**:
   1. *Semantics that ride on exception types do not survive a message
