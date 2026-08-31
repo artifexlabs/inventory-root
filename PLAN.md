@@ -1120,6 +1120,68 @@ substring/mirror numbers are the before/after of record).
 - **Not in scope.** Making the bus synchronous, or the gateway; touching
   `DataHasher`; a broker. The phase is one line drawn at one door.
 
+### Phase 27 — Tenancy: individual inventories, and virtual unions of them *(added 2026-08-31; schema RESERVED 2026-08-31 — enforcement STAGED, behind the deployment gate)*
+
+- **The ask (owner, 2026-08-31).** Person A has an inventory, person B has
+  an inventory, and a "virtual" inventory A+B exists — individual ownership
+  with shared or aggregated views over it.
+- **What the design already gives** — the reasons this is a phase and not a
+  rewrite. ULIDs everywhere: two inventories union, merge, or transfer with
+  zero collision risk and no id translation. Everything data-domain hangs
+  off `items(id)` by FK (`item_tags`, `item_identities`, `data_entries`,
+  `data_dirs`, `data_unreadable`, assets, regions), so tenancy is
+  transitively **one column on `items`**. The `actingAs(principal)` seam
+  already threads a per-request actor through both backends — a visibility
+  scope rides the same seam. Containment is a tree, so an inventory is a
+  forest of roots and cross-inventory containment can simply be forbidden
+  (a move between inventories is an explicit transfer). And Phase 24's
+  portable export + write-with-identity restore is already an
+  aggregation-by-import fallback that needs no tenancy at all.
+- **The reservation, EXECUTED 2026-08-31**, while the changesets were still
+  editable in place — that window closes when TODO item 5 persists real
+  data, after which this becomes an ALTER-plus-backfill migration.
+  `inventories` with the zero-ULID `default` row seeded; `items.inventory_id
+  NOT NULL DEFAULT` the zero ULID; `inventory_members` recorded, not
+  enforced; and the one semantic change, **owner-confirmed**:
+  `item_identities`' PK is now **`(inventory_id, kind, value)`** — within an
+  inventory a marker claims at most one item, while two inventories may each
+  own the banana UPC. `inventory_id` is denormalized from the item's row
+  (a PK cannot span a join), both `ON CONFLICT` claim sites insert it from
+  the item, and a transfer must move markers with their item.
+  Single-inventory behaviour is provably unchanged
+  (`PgTenancyReservationTest`); the memory twin keys markers globally and
+  needs nothing until enforcement makes a second inventory expressible.
+- **Where the real work is** (staged, in order, each its own branch):
+  1. **The authz model** — the genuinely new subsystem: today authorization
+     is one boolean (`users.admin`). Decide the membership vocabulary
+     (owner/member/reader?), what `admin` means in a multi-inventory
+     instance, and who may create inventories.
+  2. **The api break: visibility scoping.** Every read — `getAllItems`,
+     `getItemsOfType`, `findByTag`, `findByIdentity`, `entriesOf`,
+     `findOverlappingMedia`, `findDuplicateSections`, the audit reader —
+     takes a scope; a `scopedTo(…)` view beside `actingAs`. Blast radius:
+     both backends, `DataSystemTck` and the parity kits (the gate), storage
+     verticles, `BusActions` role maps, resources, web-app, iOS. Bigger than
+     the `findMirrorsOf` break: a cross-cutting predicate, not one method.
+  3. **Inventory management**: create, membership CRUD, and
+     transfer-between-inventories — a transfer moves the item's subtree and
+     its markers; containment never crosses an inventory boundary.
+  4. **Virtual inventories**: an inventory-group entity; reads take the
+     IN-set, writes need a declared home inventory.
+     `findOverlappingMedia` across A+B — "do we own the same disc?" — is
+     the flagship query and falls straight out of the column.
+  5. **Marker resolution**: `/i/<ulid>` stays global (ULIDs are unique;
+     authorization decides visibility); `findByIdentity` gains the scope it
+     deliberately lacks today (`PgInventorySystem` says so in place).
+- **Decisions open** (take with the owner before step 1): the role
+  vocabulary; cross-inventory containment forbidden (proposed above);
+  whether a virtual inventory is a read-only union or accepts writes under
+  a home-inventory rule; whether `audit_events` carries `inventory_id` or
+  derives it through the target item.
+- **Not in scope.** Any enforcement before the deployment workflow gate
+  (TODO item 1). Federating separate *instances* — Phase 24's
+  export/restore already covers that shape.
+
 ## First milestone (Phase 1, implementable detail)
 
 1. **`inventory-api`** — de-codegen and extend:

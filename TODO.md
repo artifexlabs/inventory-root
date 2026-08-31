@@ -158,6 +158,29 @@ CLI-shaped, no per-transaction service. Nothing written yet beyond the idea.
 
 Where: PLAN.md ongoing item 9.
 
+## 12. Tenancy enforcement, on top of the reserved schema
+
+The schema half landed 2026-08-31, while the changesets were still editable
+in place: `inventories` with the seeded zero-ULID default, `items
+.inventory_id`, `inventory_members` (recorded, not enforced), and the
+owner-confirmed `item_identities` PK `(inventory_id, kind, value)` — a
+marker claims per inventory, not globally. What remains waits deliberately
+behind item 1's gate:
+
+- The authz model — role vocabulary, what `admin` means multi-inventory,
+  who creates inventories (Phase 27 step 1, decisions first).
+- The api break: every read takes a visibility scope; `scopedTo(…)` beside
+  `actingAs`; both backends, the TCK, bus role maps, resources, web-app,
+  iOS (step 2).
+- Inventory management: create, membership, transfer-between — markers move
+  with their item (step 3).
+- Virtual inventories: A+B as a read-time union; `findOverlappingMedia`
+  across the union is the flagship (step 4).
+- Marker resolution scoping: `findByIdentity` gains the scope it
+  deliberately lacks; `/i/<ulid>` stays global (step 5).
+
+Where: PLAN.md Phase 27 (the whole design, and the open decisions).
+
 ## Waiting on things outside this repo
 
 - **Apple Developer enrollment** (refused: "Action not allowed") — blocks
