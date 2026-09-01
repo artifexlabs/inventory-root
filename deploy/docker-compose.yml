@@ -186,6 +186,13 @@ services:
       # QUARKUS_OIDC_* secrets from the workspace .env) turns Google login on.
       QUARKUS_PROFILE: prod
       INVENTORY_WEBAPP_SESSION_FILE: none
+      # Pins found necessary 2026-09-01 (first real compose run of the NATIVE
+      # web-app): the native build bakes the oidc profile's build-time bits,
+      # so under prod the default tenant still demanded an auth-server-url,
+      # and the listener fell back to 8080 despite the unprofiled 8082 in
+      # application.properties. Pin both explicitly at the container.
+      QUARKUS_OIDC_TENANT_ENABLED: "false"
+      QUARKUS_HTTP_PORT: "8082"
     depends_on:
       - inventory-web-api
     ports:
