@@ -126,6 +126,11 @@ services:
       INVENTORY_BUS_TOKEN: ${INVENTORY_BUS_TOKEN:-dev-bus-token}
       QUARKUS_DEVSERVICES_ENABLED: "false"
       INVENTORY_QR_BASE_URL: http://localhost:8082
+      # The other half of the web-app's Google login (`just up-oidc`): the
+      # exchange endpoint trades verified claims for an API token. Absent or
+      # empty, the endpoint stays 404 (Optional maps "" to empty) — so this
+      # rides along harmlessly when the stack runs password-only.
+      INVENTORY_OIDC_EXCHANGE_SECRET: ${INVENTORY_OIDC_EXCHANGE_SECRET:-}
       QUARKUS_VERTX_CLUSTER_CLUSTERED: "true"
       QUARKUS_VERTX_CLUSTER_HOST: 172.28.0.11
       QUARKUS_VERTX_CLUSTER_PORT: "15701"
@@ -182,17 +187,37 @@ services:
     image: inventory-web-app:native
     environment:
       INVENTORY_WEB_API_URL: http://inventory-web-api:8081
-      # prod profile keeps OIDC disabled; the "oidc" profile (plus the
-      # QUARKUS_OIDC_* secrets from the workspace .env) turns Google login on.
-      QUARKUS_PROFILE: prod
+      # prod profile keeps OIDC disabled (password-only login — venue-safe:
+      # no internet needed at startup). `just up-oidc` flips the profile and
+      # the tenant together and feeds in the QUARKUS_OIDC_* secrets from the
+      # workspace .env, turning the Google button on.
+      QUARKUS_PROFILE: ${INVENTORY_WEBAPP_PROFILE:-prod}
       INVENTORY_WEBAPP_SESSION_FILE: none
       # Pins found necessary 2026-09-01 (first real compose run of the NATIVE
       # web-app): the native build bakes the oidc profile's build-time bits,
       # so under prod the default tenant still demanded an auth-server-url,
       # and the listener fell back to 8080 despite the unprofiled 8082 in
-      # application.properties. Pin both explicitly at the container.
-      QUARKUS_OIDC_TENANT_ENABLED: "false"
+      # application.properties. Environment beats the properties file, so the
+      # tenant switch must travel WITH the profile — up-oidc sets both.
+      QUARKUS_OIDC_TENANT_ENABLED: ${INVENTORY_WEBAPP_OIDC_TENANT:-false}
       QUARKUS_HTTP_PORT: "8082"
+      # Empty outside oidc mode (a disabled tenant reads none of them).
+      # The provider must ride in at RUNTIME: the native binary demonstrably
+      # does not carry application.properties' runtime defaults (%oidc
+      # provider, the 8082 port), so up-oidc supplies provider=google here.
+      QUARKUS_OIDC_PROVIDER: ${INVENTORY_WEBAPP_OIDC_PROVIDER:-}
+      # ...and so must the rest of the %oidc runtime family: the flag the
+      # login template shows the button on, the web-app application type
+      # (redirect, not 401), and the challenge permission that forces the
+      # Google round-trip on the entry point — parked on a dead path when
+      # the stack runs password-only.
+      INVENTORY_OIDC_ENABLED: ${INVENTORY_WEBAPP_OIDC_ENABLED:-false}
+      QUARKUS_OIDC_APPLICATION_TYPE: ${INVENTORY_WEBAPP_OIDC_APP_TYPE:-service}
+      QUARKUS_HTTP_AUTH_PERMISSION_OIDC_PATHS: ${INVENTORY_WEBAPP_OIDC_CHALLENGE:-/__oidc-off}
+      QUARKUS_HTTP_AUTH_PERMISSION_OIDC_POLICY: authenticated
+      QUARKUS_OIDC_CLIENT_ID: ${QUARKUS_OIDC_CLIENT_ID:-}
+      QUARKUS_OIDC_CREDENTIALS_SECRET: ${QUARKUS_OIDC_CREDENTIALS_SECRET:-}
+      INVENTORY_OIDC_EXCHANGE_SECRET: ${INVENTORY_OIDC_EXCHANGE_SECRET:-}
     depends_on:
       - inventory-web-api
     ports:

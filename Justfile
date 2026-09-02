@@ -144,9 +144,15 @@ fastjars: _sync-libs
     @echo "-> delegating to Maven: fast-jars for the bus members"
     {{ test_env }} mvn -pl inventory-server,inventory-web-api,inventory-projector -am clean package -DskipTests
 
-# Native executables (web-app only in the deployed stack).
+# Native executables (web-app only in the deployed stack). Built under the
+# oidc profile ON PURPOSE (2026-09-02): quarkus.oidc.provider and
+# application-type are BUILD-time, and the maven plugin ignores the
+# properties-file quarkus.profile for the build — without this flag the
+# Google preset is never baked and `just up-oidc` cannot work. Runtime still
+# picks the mode: `up` pins the tenant off (password-only), `up-oidc` on.
 [group('build')]
-natives: (native "inventory-web-app")
+natives: _sync-libs
+    mvn -pl inventory-web-app -am clean package {{ native_flags }} -Dquarkus.profile=oidc
 
 # Container images from the built artifacts.
 [group('build')]
@@ -268,6 +274,19 @@ dev-webapp: _sync-libs
 # Start the stack: postgres -> liquibase migrate (exits 0) -> the three apps.
 [group('stack')]
 up:
+    {{ compose }} up -d
+    @just ps
+
+# The stack with Google login on the web-app: the oidc profile plus the
+# QUARKUS_OIDC_* secrets from .env. Needs internet at startup (Google
+# discovery) — use plain `up` (password-only) anywhere that isn't a given.
+# `just up` afterwards returns to password-only (compose recreates on the
+# env change).
+[group('stack')]
+up-oidc:
+    INVENTORY_WEBAPP_PROFILE=oidc INVENTORY_WEBAPP_OIDC_TENANT=true \
+    INVENTORY_WEBAPP_OIDC_PROVIDER=google INVENTORY_WEBAPP_OIDC_ENABLED=true \
+    INVENTORY_WEBAPP_OIDC_APP_TYPE=web-app INVENTORY_WEBAPP_OIDC_CHALLENGE=/oidc/login \
     {{ compose }} up -d
     @just ps
 

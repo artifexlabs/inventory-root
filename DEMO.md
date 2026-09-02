@@ -18,13 +18,21 @@ just smoke              # login → CRUD → real QR PNG → print dispatch → 
 **Print discipline:** `just smoke` dispatches a REAL label if `.env` points
 `INVENTORY_PRINTER` at hardware. Bring the stack up with
 `INVENTORY_PRINTER=log` and switch to the real printer only for demo item 3.
-The Brother sleeps after ~10 minutes — wake it right before that segment,
-and check the loaded stock matches `INVENTORY_PRINTER_FORMAT`.
+The Brother powers itself off after ~10 minutes — wake it right before that
+segment, and check the loaded cassette matches `INVENTORY_PRINTER_TAPE_MM`
+(the Brother sizes by tape width; `INVENTORY_PRINTER_FORMAT` is the
+Zebra's knob and is ignored here).
+
+**If `just up` fails in `migrate`** with "changesets check sum" errors, the
+volume predates a changeset edit (it happened at the venue, 2026-09-01):
+`just backup && just destroy && just up` — dev data only, and the backup
+makes it reversible.
 
 ## 1. The catalog: things, in exactly one place
 
-Log in at `http://localhost:8082/login` (password, or Google OIDC if
-configured). Show:
+Log in at `http://localhost:8082/login` (password login; for the Google
+button stand the stack up with `just up-oidc` instead of `just up` — it
+needs internet at startup, so password-only is the venue default). Show:
 
 - **Create and edit items** — name, type, description, quantity, weight,
   dimensions, expiration (hard stop vs recommendation), the "heavy" flag
@@ -55,6 +63,11 @@ configured). Show:
 
 ## 3. Print a real label (the hardware moment)
 
+*This is the segment with an external dependency — if the Brother never
+makes it onto the venue network, use "No printer?" below; the segment
+survives without hardware. Decide which path you're on BEFORE going live,
+not during.*
+
 Wake the printer, confirm the stock, then:
 
 ```sh
@@ -67,6 +80,33 @@ size), real Brother raster-protocol bytes over TCP 9100 (a Zebra/ZPL path
 exists too — mention it, but the Zebra stays home; this demo prints on the
 Brother only), and the print is **audited and published** like every other
 mutation. Scan the fresh label back to close the loop.
+
+### No printer? The segment survives
+
+The label pipeline demos end to end without hardware. Keep
+`INVENTORY_PRINTER=log` and run this version instead:
+
+- **Bring pre-printed labels.** Print two or three at home the night
+  before, for items that exist in the demo database, and pass them
+  around — a physical artifact needs no network, and any phone camera
+  decodes one on the spot: the URL preview appearing on an audience
+  member's own phone IS the pitch. (Their encoded host is the home base
+  URL, so live tap-through on stage comes from the on-screen QR below,
+  not from the props.)
+- **Scan the screen.** Put an item's `qr.png` on the projected display and
+  have someone scan it there. For the tap-through to actually open the
+  item page, bring the stack up with
+  `INVENTORY_QR_BASE_URL=http://<laptop-venue-ip>:8082` so the QR encodes
+  an address audience phones can reach — and know that a venue network
+  with client isolation blocks even that; the camera's URL preview still
+  works regardless.
+- **Dispatch anyway.** `just print-label <id>` still returns 202, the log
+  printer records the job, and the audit row plus the live fact on
+  `/api/v1/events/stream` land in front of the audience — the entire
+  pipeline observed, minus the paper.
+- **For a technical audience:** `just smoke-fake-printer` stands up a TCP
+  9100 sink and asserts that REAL Brother raster bytes arrive (the
+  100-byte invalidate + ESC@ … 0x1A) — hardware proof without hardware.
 
 ### Printer travel kit — getting the Brother onto the venue network
 

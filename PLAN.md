@@ -2545,3 +2545,19 @@ free. Item 4 is standalone.
       same golden-file gate, same stock order (arriving 2026-08-21) and print
       discipline.
       *Builds with 14 — one geometry pass covers both.*
+
+- [ ] **16. The native web-app ignores application.properties runtime
+      defaults** *(added 2026-09-02)* — found while wiring `just up-oidc`:
+      the GraalVM web-app binary honors NONE of the properties file's
+      runtime values (the unprofiled `quarkus.http.port=8082`, the whole
+      `%oidc` runtime family — provider, `inventory.oidc.enabled`,
+      application-type, the challenge permission), and separately the Maven
+      plugin ignores the file's `quarkus.profile` when choosing the BUILD
+      profile, so the Google preset was never baked (fixed: the `natives`
+      recipe passes `-Dquarkus.profile=oidc`). Every needed runtime value
+      now rides in as container environment instead
+      (deploy/docker-compose.yml, the `INVENTORY_WEBAPP_*` family; `just
+      up` = password-only, `just up-oidc` = Google). Investigate the WHY
+      (Quarkus 3.27.5.1 native config sourcing) before the next native
+      module ships — inventory-hasher's five-platform build (Phase 25)
+      would inherit the same trap.
